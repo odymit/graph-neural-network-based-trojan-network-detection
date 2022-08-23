@@ -12,3 +12,6 @@ raw_data/*
 raw_data/rt_polarity/*
 !rt-polarity.pos
 !rt-polarity.neg
+
+.idea/
+.ipynb_checkpoints/

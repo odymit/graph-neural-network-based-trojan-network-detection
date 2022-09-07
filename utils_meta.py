@@ -81,6 +81,7 @@ def epoch_meta_eval(meta_model, basic_model, dataset, is_discrete, threshold=0.0
     perm = list(range(len(dataset)))
     for i in perm:
         x, y = dataset[i]
+        # doesn't create benign model for ModelTest
         basic_model.load_state_dict(torch.load(x))
 
         if is_discrete:

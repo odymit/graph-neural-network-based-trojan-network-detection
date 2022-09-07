@@ -11,6 +11,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
 parser.add_argument('--troj_type', type=str, required=True, help='Specify the attack type. M: modification attack; B: blending attack.')
+parser.add_argument('--model', type=str, required=False, help='Specify the model')
 if __name__ == '__main__':
     args = parser.parse_args()
     assert args.troj_type in ('M', 'B'), 'unknown trojan pattern'
@@ -26,17 +27,17 @@ if __name__ == '__main__':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    BATCH_SIZE, N_EPOCH, trainset, testset, is_binary, need_pad, Model, troj_gen_func, random_troj_setting = load_dataset_setting(args.task)
+    BATCH_SIZE, N_EPOCH, trainset, testset, is_binary, need_pad, Model, troj_gen_func, random_troj_setting = load_dataset_setting(args.task, args.model)
     tot_num = len(trainset)
     shadow_indices = np.random.choice(tot_num, int(tot_num*SHADOW_PROP))
     target_indices = np.random.choice(tot_num, int(tot_num*TARGET_PROP))
     print ("Data indices owned by the attacker:",target_indices)
 
-    SAVE_PREFIX = './shadow_model_ckpt/%s'%args.task
+    SAVE_PREFIX = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s'%args.task
     if not os.path.isdir(SAVE_PREFIX):
         os.mkdir(SAVE_PREFIX)
-    if not os.path.isdir(SAVE_PREFIX+'/models'):
-        os.mkdir(SAVE_PREFIX+'/models')
+    if not os.path.isdir(SAVE_PREFIX+'/models_hetero'):
+        os.mkdir(SAVE_PREFIX+'/models_hetero')
 
     all_target_acc = []
     all_target_acc_mal = []
@@ -51,7 +52,7 @@ if __name__ == '__main__':
         testloader_mal = torch.utils.data.DataLoader(testset_mal, batch_size=BATCH_SIZE)
 
         train_model(model, trainloader, epoch_num=int(N_EPOCH*SHADOW_PROP/TARGET_PROP), is_binary=is_binary, verbose=False)
-        save_path = SAVE_PREFIX+'/models/target_troj%s_%d.model'%(args.troj_type, i)
+        save_path = SAVE_PREFIX+'/models_hetero/target_troj%s_%d.model'%(args.troj_type, i)
         torch.save(model.state_dict(), save_path)
         acc = eval_model(model, testloader_benign, is_binary=is_binary)
         acc_mal = eval_model(model, testloader_mal, is_binary=is_binary)

@@ -3,8 +3,14 @@ import torch
 from sklearn.metrics import roc_auc_score
 import torchvision
 import torchvision.transforms as transforms
+import importlib
 
-def load_dataset_setting(task):
+def load_spec_model(module, model_index):
+    model = getattr(module, 'Model'+model_index)
+    return model
+
+
+def load_dataset_setting(task, model):
     if task == 'mnist':
         BATCH_SIZE = 100
         N_EPOCH = 100
@@ -15,7 +21,12 @@ def load_dataset_setting(task):
         testset = torchvision.datasets.MNIST(root='./raw_data/', train=False, download=False, transform=transform)
         is_binary = False
         need_pad = False
-        from model_lib.mnist_cnn_model import Model, troj_gen_func, random_troj_setting
+
+        # import module
+        from model_lib import mnist_cnn_model
+        Model = load_spec_model(mnist_cnn_model, model)
+        print("load %s mnist cnn classification model with later process." % Model.__name__)
+        from model_lib.mnist_cnn_model import troj_gen_func, random_troj_setting
     elif task == 'cifar10':
         BATCH_SIZE = 100
         N_EPOCH = 100
@@ -44,9 +55,14 @@ def load_dataset_setting(task):
         testset = RTNLP(train=False)
         is_binary = True
         need_pad = True
-        from model_lib.rtNLP_cnn_model import Model, troj_gen_func, random_troj_setting
+        if model:
+            from model_lib.rtNLP_cnn_model import ModelTest as Model
+            from model_lib.rtNLP_cnn_model import troj_gen_func, random_troj_setting
+        else:
+            from model_lib.rtNLP_cnn_model import Model, troj_gen_func, random_troj_setting
     else:
         raise NotImplementedError("Unknown task %s"%task)
+
 
     return BATCH_SIZE, N_EPOCH, trainset, testset, is_binary, need_pad, Model, troj_gen_func, random_troj_setting
 

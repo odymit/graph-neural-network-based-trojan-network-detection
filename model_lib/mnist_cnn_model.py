@@ -3,10 +3,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class Model(nn.Module):
+class Model0(nn.Module):
     def __init__(self, gpu=False):
-        super(Model, self).__init__()
+        super(Model0, self).__init__()
         self.gpu = gpu
+        self.name = 'Model0'
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=5, padding=0)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=0)
@@ -34,6 +35,39 @@ class Model(nn.Module):
             label = label.cuda()
         return F.cross_entropy(pred, label)
 
+class Model1(nn.Module):
+    def __init__(self, gpu=False):
+        super(Model1, self).__init__()
+        self.gpu = gpu
+
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, padding=0)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=0)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=3, padding=0)
+        self.max_pool_1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.max_pool_2 = nn.MaxPool2d(kernel_size=2, stride=1)
+        self.fc = nn.Linear(32*4*4, 512)
+        self.output = nn.Linear(512, 10)
+
+        if gpu:
+            self.cuda()
+
+    def forward(self, x):
+        if self.gpu:
+            x = x.cuda()
+        B = x.size()[0]
+
+        x = self.max_pool_1(F.relu(self.conv1(x)))
+        x = self.max_pool_2(F.relu(self.conv2(x)))
+        x = self.max_pool_2(F.relu(self.conv3(x)))
+        x = F.relu(self.fc(x.view(B,32*4*4)))
+        x = self.output(x)
+
+        return x
+
+    def loss(self, pred, label):
+        if self.gpu:
+            label = label.cuda()
+        return F.cross_entropy(pred, label)
 
 def random_troj_setting(troj_type):
     MAX_SIZE = 28

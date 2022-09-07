@@ -10,13 +10,19 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
+parser.add_argument('--model', type=str, required=False, help='Specify the model')
+parser.add_argument('--n', type=str, required=False, help='train num on test model')
 if __name__ == '__main__':
     args = parser.parse_args()
-
+    if not args.model:
+        args.model = '0'
     GPU = True
     SHADOW_PROP = 0.02
     TARGET_PROP = 0.5
-    SHADOW_NUM = 2048+256
+    if args.n:
+        SHADOW_NUM = args.n
+    else:
+        SHADOW_NUM = 2048+256
     TARGET_NUM = 256
     np.random.seed(0)
     torch.manual_seed(0)
@@ -25,7 +31,7 @@ if __name__ == '__main__':
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    BATCH_SIZE, N_EPOCH, trainset, testset, is_binary, _, Model, _, _ = load_dataset_setting(args.task)
+    BATCH_SIZE, N_EPOCH, trainset, testset, is_binary, _, Model, _, _ = load_dataset_setting(args.task, args.model)
     tot_num = len(trainset)
     shadow_indices = np.random.choice(tot_num, int(tot_num*SHADOW_PROP))
     target_indices = np.random.choice(tot_num, int(tot_num*TARGET_PROP))
@@ -37,11 +43,12 @@ if __name__ == '__main__':
     target_loader = torch.utils.data.DataLoader(target_set, batch_size=BATCH_SIZE, shuffle=True)
     testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE)
 
+    # SAVE_PREFIX = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s'%args.task
     SAVE_PREFIX = './shadow_model_ckpt/%s'%args.task
     if not os.path.isdir(SAVE_PREFIX):
         os.mkdir(SAVE_PREFIX)
-    if not os.path.isdir(SAVE_PREFIX+'/models'):
-        os.mkdir(SAVE_PREFIX+'/models')
+    if not os.path.isdir(SAVE_PREFIX+'/models'+args.model):
+        os.mkdir(SAVE_PREFIX+'/models'+args.model)
 
     all_shadow_acc = []
     all_target_acc = []
@@ -49,7 +56,7 @@ if __name__ == '__main__':
     for i in range(SHADOW_NUM):
         model = Model(gpu=GPU)
         train_model(model, shadow_loader, epoch_num=N_EPOCH, is_binary=is_binary, verbose=False)
-        save_path = SAVE_PREFIX+'/models/shadow_benign_%d.model'%i
+        save_path = SAVE_PREFIX+'/models'+args.model+'/shadow_benign_%d.model'%i
         torch.save(model.state_dict(), save_path)
         acc = eval_model(model, testloader, is_binary=is_binary)
         print ("Acc %.4f, saved to %s @ %s"%(acc, save_path, datetime.now()))
@@ -58,7 +65,7 @@ if __name__ == '__main__':
     for i in range(TARGET_NUM):
         model = Model(gpu=GPU)
         train_model(model, target_loader, epoch_num=int(N_EPOCH*SHADOW_PROP/TARGET_PROP), is_binary=is_binary, verbose=False)
-        save_path = SAVE_PREFIX+'/models/target_benign_%d.model'%i
+        save_path = SAVE_PREFIX+'/models'+args.model+'/target_benign_%d.model'%i
         torch.save(model.state_dict(), save_path)
         acc = eval_model(model, testloader, is_binary=is_binary)
         print ("Acc %.4f, saved to %s @ %s"%(acc, save_path, datetime.now()))
@@ -68,7 +75,7 @@ if __name__ == '__main__':
            'target_num':TARGET_NUM,
            'shadow_acc':sum(all_shadow_acc)/len(all_shadow_acc),
            'target_acc':sum(all_target_acc)/len(all_target_acc)}
-    log_path = SAVE_PREFIX+'/benign.log'
+    log_path = SAVE_PREFIX+'/benign_%s.log'%args.model
     with open(log_path, "w") as outf:
         json.dump(log, outf)
     print ("Log file saved to %s"%log_path)

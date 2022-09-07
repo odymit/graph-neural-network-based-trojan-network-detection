@@ -11,6 +11,7 @@ parser.add_argument('--task', type=str, required=True, help='Specfiy the task (m
 parser.add_argument('--troj_type', type=str, required=True, help='Specify the attack to evaluate. M: modification attack; B: blending attack.')
 parser.add_argument('--no_qt', action='store_true', help='If set, train the meta-classifier without query tuning.')
 parser.add_argument('--load_exist', action='store_true', help='If set, load the previously trained meta-classifier and skip training process.')
+# parser.add_argument('--model', type=str, required=False, help='Specify the model')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -22,12 +23,15 @@ if __name__ == '__main__':
     TRAIN_NUM = 2048
     VAL_NUM = 256
     TEST_NUM = 256
+    # TRAIN_NUM = 4096
+    # VAL_NUM = 512
+    # TEST_NUM = 512
 
     if args.no_qt:
-        save_path = './meta_classifier_ckpt/%s_no-qt.model'%args.task
+        save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s_no-qt.model'%args.task
     else:
-        save_path = './meta_classifier_ckpt/%s.model'%args.task
-    shadow_path = './shadow_model_ckpt/%s/models'%args.task
+        save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s.model'%args.task
+    shadow_path = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s/models'%args.task
     
     Model, input_size, class_num, inp_mean, inp_std, is_discrete = load_model_setting(args.task)
     if inp_mean is not None:
@@ -47,22 +51,26 @@ if __name__ == '__main__':
 
     val_dataset = []
     for i in range(TRAIN_NUM, TRAIN_NUM+VAL_NUM):
+        # x = shadow_path + '_hetero' + '/shadow_jumbo_%d.model'%i
         x = shadow_path + '/shadow_jumbo_%d.model'%i
         val_dataset.append((x,1))
+        # x = shadow_path + '_hetero' + '/shadow_benign_%d.model'%i
         x = shadow_path + '/shadow_benign_%d.model'%i
         val_dataset.append((x,0))
 
     test_dataset = []
     for i in range(TEST_NUM):
-        x = shadow_path + '/target_troj%s_%d.model'%(args.troj_type, i)
+        x = shadow_path + '_hetero' + '/target_troj%s_%d.model'%(args.troj_type, i)
         test_dataset.append((x,1))
-        x = shadow_path + '/target_benign_%d.model'%i
+        x = shadow_path + '_hetero' + '/target_benign_%d.model'%i
         test_dataset.append((x,0))
 
+
     AUCs = []
+    from model_lib.mnist_cnn_model import ModelTest
     for i in range(N_REPEAT): # Result contains randomness, so run several times and take the average
         shadow_model = Model(gpu=GPU)
-        target_model = Model(gpu=GPU)
+        target_model = ModelTest(gpu=GPU)
         meta_model = MetaClassifier(input_size, class_num, gpu=GPU)
         if inp_mean is not None:
             #Initialize the input using data mean and std
@@ -94,7 +102,10 @@ if __name__ == '__main__':
             test_info = epoch_meta_eval(meta_model, target_model, test_dataset, is_discrete=is_discrete, threshold='half')
 
         print ("\tTest AUC:", test_info[1])
+        print ("\tTest Acc:", test_info[2])
+        print ("\tTest loss:", test_info[0])
+
         AUCs.append(test_info[1])
-        
+
     AUC_mean = sum(AUCs) / len(AUCs)
     print ("Average detection AUC on %d meta classifier: %.4f"%(N_REPEAT, AUC_mean))

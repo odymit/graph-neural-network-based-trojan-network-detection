@@ -39,6 +39,7 @@ class Model1(nn.Module):
     def __init__(self, gpu=False):
         super(Model1, self).__init__()
         self.gpu = gpu
+        self.name = 'Model1'
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=5, padding=0)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=0)
@@ -113,3 +114,156 @@ def troj_gen_func(X, y, atk_setting):
     X_new[0, w:w+p_size, h:h+p_size] = alpha * torch.FloatTensor(pattern) + (1-alpha) * X_new[0, w:w+p_size, h:h+p_size]
     y_new = target_y
     return X_new, y_new
+
+class Model2(nn.Module):
+    def __init__(self, gpu=False):
+        super(Model2, self).__init__()
+        self.gpu = gpu
+        self.name = 'Model2'
+
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 16, kernel_size=5)
+        self.fc1 = nn.Linear(10 * 10 * 16, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 32)
+        self.output = nn.Linear(32, 10)
+
+        if gpu:
+            self.cuda()
+
+    def forward(self, x):
+        if self.gpu:
+            x = x.cuda()
+        B = x.size()[0]
+
+        x = F.relu(self.conv1(x))
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = x.view(-1, 10 * 10 * 16)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = self.output(x)
+
+        return x
+
+    def loss(self, pred, label):
+        if self.gpu:
+            label = label.cuda()
+        return F.cross_entropy(pred, label)
+
+class Model3(nn.Module):
+    def __init__(self, gpu=False):
+        super(Model3, self).__init__()
+        self.gpu = gpu
+        self.name = 'Model3'
+
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=3)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=3)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=3)
+        self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.adap = nn.AdaptiveAvgPool2d(output_size=(6, 6))
+        self.fc1 = nn.Linear(256 * 3 * 3, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.output = nn.Linear(84, 10)
+
+        if gpu:
+            self.cuda()
+
+    def forward(self, x):
+        if self.gpu:
+            x = x.cuda()
+        B = x.size()[0]
+
+        x = self.max_pool(F.relu(self.conv1(x)))
+        x = self.max_pool(F.relu(self.conv2(x)))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.fc1(x.view(B, 3 * 3 * 256)))
+        x = F.relu(self.fc2(x))
+        x = self.output(x)
+
+        return x
+
+    def loss(self, pred, label):
+        if self.gpu:
+            label = label.cuda()
+        return F.cross_entropy(pred, label)
+
+
+class Model4(nn.Module):
+    def __init__(self, gpu=False):
+        super(Model4, self).__init__()
+        self.gpu = gpu
+        self.name = 'Model4'
+
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1)
+        self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.adap = nn.AdaptiveAvgPool2d(output_size=(6, 6))
+        self.fc = nn.Linear(32 * 6 * 6, 512)
+        self.output = nn.Linear(512, 10)
+
+        if gpu:
+            self.cuda()
+
+    def forward(self, x):
+        if self.gpu:
+            x = x.cuda()
+        B = x.size()[0]
+
+        x = self.max_pool(F.relu(self.conv1(x)))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = self.max_pool(F.relu(self.conv4(x)))
+        x = self.adap(x)
+        x = F.relu(self.fc(x.view(-1, 32 * 6 * 6)))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.output(x)
+
+        return x
+
+    def loss(self, pred, label):
+        if self.gpu:
+            label = label.cuda()
+        return F.cross_entropy(pred, label)
+
+
+class Model5(nn.Module):
+    def __init__(self, gpu=False):
+        super(Model5, self).__init__()
+        self.gpu = gpu
+        self.name = 'Model4'
+
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(64 * 7 * 7, 1568)
+        self.output = nn.Linear(1568, 10)
+
+        if gpu:
+            self.cuda()
+
+    def forward(self, x):
+        if self.gpu:
+            x = x.cuda()
+        B = x.size()[0]
+
+        x = F.relu(self.conv1(x))
+        x = self.max_pool(F.relu(self.conv2(x)))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = self.max_pool(F.relu(self.conv4(x)))
+        x = F.relu(self.fc1(x.view(B, 64 * 7 * 7)))
+        x = self.output(x)
+
+        return x
+
+    def loss(self, pred, label):
+        if self.gpu:
+            label = label.cuda()
+        return F.cross_entropy(pred, label)

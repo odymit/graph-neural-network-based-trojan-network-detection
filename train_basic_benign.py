@@ -12,18 +12,23 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
 parser.add_argument('--model', type=str, required=False, help='Specify the model')
 parser.add_argument('--n', type=str, required=False, help='train num on test model')
+parser.add_argument('--save_dir', type=str, required=False, help='specify the shadow model saved dir')
+
 if __name__ == '__main__':
     args = parser.parse_args()
     if not args.model:
         args.model = '0'
+    if not args.save_dir:
+        args.save_dir = './'
     GPU = True
     SHADOW_PROP = 0.02
     TARGET_PROP = 0.5
     if args.n:
-        SHADOW_NUM = args.n
+        SHADOW_NUM = int(args.n)
+        TARGET_NUM = int(args.n)
     else:
         SHADOW_NUM = 2048+256
-    TARGET_NUM = 256
+        TARGET_NUM = 256
     np.random.seed(0)
     torch.manual_seed(0)
     if GPU:
@@ -44,7 +49,7 @@ if __name__ == '__main__':
     testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE)
 
     # SAVE_PREFIX = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s'%args.task
-    SAVE_PREFIX = './shadow_model_ckpt/%s'%args.task
+    SAVE_PREFIX = os.path.join(args.save_dir, 'shadow_model_ckpt/%s'%args.task)
     if not os.path.isdir(SAVE_PREFIX):
         os.mkdir(SAVE_PREFIX)
     if not os.path.isdir(SAVE_PREFIX+'/models'+args.model):

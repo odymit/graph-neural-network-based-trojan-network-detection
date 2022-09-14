@@ -5,6 +5,7 @@ from utils_meta import load_model_setting, epoch_meta_train, epoch_meta_eval
 from meta_classifier import MetaClassifier
 import argparse
 from tqdm import tqdm
+from utils_meta import get_cur_model
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
@@ -33,7 +34,7 @@ if __name__ == '__main__':
         save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s.model'%args.task
     shadow_path = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s/models'%args.task
     
-    Model, input_size, class_num, inp_mean, inp_std, is_discrete = load_model_setting(args.task)
+    father_model, input_size, class_num, inp_mean, inp_std, is_discrete = load_model_setting(args.task)
     if inp_mean is not None:
         inp_mean = torch.FloatTensor(inp_mean)
         inp_std = torch.FloatTensor(inp_std)
@@ -67,10 +68,8 @@ if __name__ == '__main__':
 
 
     AUCs = []
-    from model_lib.mnist_cnn_model import ModelTest
     for i in range(N_REPEAT): # Result contains randomness, so run several times and take the average
-        shadow_model = Model(gpu=GPU)
-        target_model = ModelTest(gpu=GPU)
+        # target_model = Model(gpu=GPU)
         meta_model = MetaClassifier(input_size, class_num, gpu=GPU)
         if inp_mean is not None:
             #Initialize the input using data mean and std
@@ -90,16 +89,16 @@ if __name__ == '__main__':
             best_eval_auc = None
             test_info = None
             for _ in tqdm(range(N_EPOCH)):
-                epoch_meta_train(meta_model, shadow_model, optimizer, train_dataset, is_discrete=is_discrete, threshold='half')
-                eval_loss, eval_auc, eval_acc = epoch_meta_eval(meta_model, shadow_model, val_dataset, is_discrete=is_discrete, threshold='half')
+                epoch_meta_train(meta_model, father_model, optimizer, train_dataset, is_discrete=is_discrete, threshold='half')
+                eval_loss, eval_auc, eval_acc = epoch_meta_eval(meta_model, father_model, val_dataset, is_discrete=is_discrete, threshold='half')
                 if best_eval_auc is None or eval_auc > best_eval_auc:
                     best_eval_auc = eval_auc
-                    test_info = epoch_meta_eval(meta_model, target_model, test_dataset, is_discrete=is_discrete, threshold='half')
+                    test_info = epoch_meta_eval(meta_model, father_model, test_dataset, is_discrete=is_discrete, threshold='half')
                     torch.save(meta_model.state_dict(), save_path+'_%d'%i)
         else:
             print ("Evaluating Meta Classifier %d/%d"%(i+1, N_REPEAT))
             meta_model.load_state_dict(torch.load(save_path+'_%d'%i))
-            test_info = epoch_meta_eval(meta_model, target_model, test_dataset, is_discrete=is_discrete, threshold='half')
+            test_info = epoch_meta_eval(meta_model, father_model, test_dataset, is_discrete=is_discrete, threshold='half')
 
         print ("\tTest AUC:", test_info[1])
         print ("\tTest Acc:", test_info[2])

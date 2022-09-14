@@ -1,30 +1,33 @@
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
+def get_cur_model(father_model, path):
+    pass
+
 
 def load_model_setting(task):
     if task == 'mnist':
-        from model_lib.mnist_cnn_model import Model
+        import model_lib.mnist_cnn_model as Model
         input_size = (1, 28, 28)
         class_num = 10
         normed_mean = np.array((0.1307,))
         normed_std = np.array((0.3081,))
         is_discrete = False
     elif task == 'cifar10':
-        from model_lib.cifar10_cnn_model import Model
+        import model_lib.cifar10_cnn_model as Model
         input_size = (3, 32, 32)
         class_num = 10
         normed_mean = np.reshape(np.array((0.4914, 0.4822, 0.4465)),(3,1,1))
         normed_std = np.reshape(np.array((0.247, 0.243, 0.261)),(3,1,1))
         is_discrete = False
     elif task == 'audio':
-        from model_lib.audio_rnn_model import Model
+        import model_lib.audio_rnn_model as Model
         input_size = (16000,)
         class_num = 10
         normed_mean = normed_std = None
         is_discrete = False
     elif task == 'rtNLP':
-        from model_lib.rtNLP_cnn_model import Model
+        import model_lib.rtNLP_cnn_model as Model
         input_size = (1, 10, 300)
         class_num = 1  #Two-class, but only one output
         normed_mean = normed_std = None
@@ -35,9 +38,9 @@ def load_model_setting(task):
     return Model, input_size, class_num, normed_mean, normed_std, is_discrete
 
 
-def epoch_meta_train(meta_model, basic_model, optimizer, dataset, is_discrete, threshold=0.0):
+def epoch_meta_train(meta_model, father_model, optimizer, dataset, is_discrete, threshold=0.0):
+
     meta_model.train()
-    basic_model.train()
 
     cum_loss = 0.0
     preds = []
@@ -45,7 +48,9 @@ def epoch_meta_train(meta_model, basic_model, optimizer, dataset, is_discrete, t
     perm = np.random.permutation(len(dataset))
     for i in perm:
         x, y = dataset[i]
-
+        print(x)
+        basic_model = get_cur_model(father_model, x)
+        basic_model.train()
         basic_model.load_state_dict(torch.load(x))
         if is_discrete:
             out = basic_model.emb_forward(meta_model.inp)

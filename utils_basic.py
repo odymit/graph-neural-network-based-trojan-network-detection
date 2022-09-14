@@ -37,7 +37,10 @@ def load_dataset_setting(task, model):
         testset = torchvision.datasets.CIFAR10(root='./raw_data/', train=False, download=False, transform=transform)
         is_binary = False
         need_pad = False
-        from model_lib.cifar10_cnn_model import Model, troj_gen_func, random_troj_setting
+        # import module
+        from model_lib import cifar10_cnn_model
+        Model = load_spec_model(cifar10_cnn_model, model)
+        from model_lib.cifar10_cnn_model import troj_gen_func, random_troj_setting
     elif task == 'audio':
         BATCH_SIZE = 100
         N_EPOCH = 100

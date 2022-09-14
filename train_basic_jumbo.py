@@ -11,13 +11,26 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
 parser.add_argument('--model', type=str, required=False, help='Specify the model')
+parser.add_argument('--n', type=str, required=False, help='train num on test model')
+parser.add_argument('--save_dir', type=str, required=False, help='specify the shadow model saved dir')
+
 if __name__ == '__main__':
     args = parser.parse_args()
+    if not args.model:
+        args.model = '0'
+    if not args.save_dir:
+        args.save_dir = './'
 
     GPU = True
     SHADOW_PROP = 0.02
     TARGET_PROP = 0.5
-    SHADOW_NUM = 2048+256
+    # SHADOW_NUM = 2048+256
+    if args.n:
+        SHADOW_NUM = int(args.n)
+        TARGET_NUM = int(args.n)
+    else:
+        SHADOW_NUM = 2048+256
+        TARGET_NUM = 256
     np.random.seed(0)
     torch.manual_seed(0)
     if GPU:
@@ -34,8 +47,8 @@ if __name__ == '__main__':
     SAVE_PREFIX = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s'%args.task
     if not os.path.isdir(SAVE_PREFIX):
         os.mkdir(SAVE_PREFIX)
-    if not os.path.isdir(SAVE_PREFIX+'/models_hetero'):
-        os.mkdir(SAVE_PREFIX+'/models_hetero')
+    if not os.path.isdir(SAVE_PREFIX+'/models'+args.model):
+        os.mkdir(SAVE_PREFIX+'/models'+args.model)
 
     all_shadow_acc = []
     all_shadow_acc_mal = []
@@ -50,7 +63,7 @@ if __name__ == '__main__':
         testloader_mal = torch.utils.data.DataLoader(testset_mal, batch_size=BATCH_SIZE)
 
         train_model(model, trainloader, epoch_num=N_EPOCH, is_binary=is_binary, verbose=False)
-        save_path = SAVE_PREFIX+'/models_hetero/shadow_jumbo_%d.model'%i
+        save_path = SAVE_PREFIX+'/models'+args.model+'/shadow_jumbo_%d.model'%i
         torch.save(model.state_dict(), save_path)
         acc = eval_model(model, testloader_benign, is_binary=is_binary)
         acc_mal = eval_model(model, testloader_mal, is_binary=is_binary)
@@ -63,7 +76,7 @@ if __name__ == '__main__':
     log = {'shadow_num':SHADOW_NUM,
            'shadow_acc':sum(all_shadow_acc)/len(all_shadow_acc),
            'shadow_acc_mal':sum(all_shadow_acc_mal)/len(all_shadow_acc_mal)}
-    log_path = SAVE_PREFIX+'/jumbo.log'
+    log_path = SAVE_PREFIX+'/jumbo_%s.log'%args.model
     with open(log_path, "w") as outf:
         json.dump(log, outf)
     print ("Log file saved to %s"%log_path)

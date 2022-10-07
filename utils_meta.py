@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
-def get_cur_model(father_model, path):
-    pass
+from utils_basic import load_spec_model
+
 
 
 def load_model_setting(task):
@@ -47,9 +47,8 @@ def epoch_meta_train(meta_model, father_model, optimizer, dataset, is_discrete, 
     labs = []
     perm = np.random.permutation(len(dataset))
     for i in perm:
-        x, y = dataset[i]
-        print(x)
-        basic_model = get_cur_model(father_model, x)
+        x, y, z = dataset[i]
+        basic_model = load_spec_model(father_model, z)
         basic_model.train()
         basic_model.load_state_dict(torch.load(x))
         if is_discrete:
@@ -76,17 +75,18 @@ def epoch_meta_train(meta_model, father_model, optimizer, dataset, is_discrete, 
 
     return cum_loss / len(dataset), auc, acc
 
-def epoch_meta_eval(meta_model, basic_model, dataset, is_discrete, threshold=0.0):
+def epoch_meta_eval(meta_model, father_model, dataset, is_discrete, threshold=0.0):
     meta_model.eval()
-    basic_model.train()
 
     cum_loss = 0.0
     preds = []
     labs = []
     perm = list(range(len(dataset)))
     for i in perm:
-        x, y = dataset[i]
+        x, y, z = dataset[i]
         # doesn't create benign model for ModelTest
+        basic_model = load_spec_model(father_model, z)
+        basic_model.train()
         basic_model.load_state_dict(torch.load(x))
 
         if is_discrete:
@@ -110,13 +110,14 @@ def epoch_meta_eval(meta_model, basic_model, dataset, is_discrete, threshold=0.0
     return cum_loss / len(preds), auc, acc
 
 
-def epoch_meta_train_oc(meta_model, basic_model, optimizer, dataset, is_discrete):
+def epoch_meta_train_oc(meta_model, father_model, optimizer, dataset, is_discrete):
     scores = []
     cum_loss = 0.0
     perm = np.random.permutation(len(dataset))
     for i in perm:
-        x, y = dataset[i]
+        x, y, z = dataset[i]
         assert y == 1
+        basic_model = load_spec_model(father_model, z)
         basic_model.load_state_dict(torch.load(x))
         if is_discrete:
             out = basic_model.emb_forward(meta_model.inp)
@@ -133,10 +134,11 @@ def epoch_meta_train_oc(meta_model, basic_model, optimizer, dataset, is_discrete
         meta_model.update_r(scores)
     return cum_loss / len(dataset)
 
-def epoch_meta_eval_oc(meta_model, basic_model, dataset, is_discrete, threshold=0.0):
+def epoch_meta_eval_oc(meta_model, father_model, dataset, is_discrete, threshold=0.0):
     preds = []
     labs = []
-    for x, y in dataset:
+    for x, y, z in dataset:
+        basic_model = load_spec_model(father_model, z)
         basic_model.load_state_dict(torch.load(x))
         if is_discrete:
             out = basic_model.emb_forward(meta_model.inp)

@@ -239,11 +239,12 @@ class Model5(nn.Module):
 
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(32, 16, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(16, 8, kernel_size=3, stride=1, padding=1)
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.fc1 = nn.Linear(64 * 7 * 7, 1568)
-        self.output = nn.Linear(1568, 10)
+        self.fc1 = nn.Linear(7 * 7 * 8, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.output = nn.Linear(128, 10)
 
         if gpu:
             self.cuda()
@@ -255,10 +256,10 @@ class Model5(nn.Module):
 
         x = F.relu(self.conv1(x))
         x = self.max_pool(F.relu(self.conv2(x)))
-        x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
         x = self.max_pool(F.relu(self.conv4(x)))
-        x = F.relu(self.fc1(x.view(B, 64 * 7 * 7)))
+        x = F.relu(self.fc1(x.view(B, 7 * 7 * 8)))
+        x = F.relu(self.fc2(x))
         x = self.output(x)
 
         return x

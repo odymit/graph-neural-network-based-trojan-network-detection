@@ -5,13 +5,14 @@ from utils_meta import load_model_setting, epoch_meta_train, epoch_meta_eval
 from meta_classifier import MetaClassifier
 import argparse
 from tqdm import tqdm
-from utils_meta import get_cur_model
+from utils_gnn import load_dataset
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
 parser.add_argument('--troj_type', type=str, required=True, help='Specify the attack to evaluate. M: modification attack; B: blending attack.')
 parser.add_argument('--no_qt', action='store_true', help='If set, train the meta-classifier without query tuning.')
 parser.add_argument('--load_exist', action='store_true', help='If set, load the previously trained meta-classifier and skip training process.')
+parser.add_argument('--struc', type=str, required=False, help='Specify the structure same or not, same is 1, hetero is 0')
 # parser.add_argument('--model', type=str, required=False, help='Specify the model')
 
 if __name__ == '__main__':
@@ -29,7 +30,7 @@ if __name__ == '__main__':
     # TEST_NUM = 512
 
     if args.no_qt:
-        save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s_no-qt.model'%args.task
+        save_path = '/home/ubuntu/date/hdd4/meta_clasifier_ckpt/%s_no-qt.model'%args.task
     else:
         save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s.model'%args.task
     shadow_path = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s/models'%args.task
@@ -44,27 +45,10 @@ if __name__ == '__main__':
     print ("Task: %s; target Trojan type: %s; input size: %s; class num: %s"%(args.task, args.troj_type, input_size, class_num))
 
     train_dataset = []
-    for i in range(TRAIN_NUM):
-        x = shadow_path + '/shadow_jumbo_%d.model'%i
-        train_dataset.append((x,1))
-        x = shadow_path + '/shadow_benign_%d.model'%i
-        train_dataset.append((x,0))
-
     val_dataset = []
-    for i in range(TRAIN_NUM, TRAIN_NUM+VAL_NUM):
-        # x = shadow_path + '_hetero' + '/shadow_jumbo_%d.model'%i
-        x = shadow_path + '/shadow_jumbo_%d.model'%i
-        val_dataset.append((x,1))
-        # x = shadow_path + '_hetero' + '/shadow_benign_%d.model'%i
-        x = shadow_path + '/shadow_benign_%d.model'%i
-        val_dataset.append((x,0))
-
     test_dataset = []
-    for i in range(TEST_NUM):
-        x = shadow_path + '_hetero' + '/target_troj%s_%d.model'%(args.troj_type, i)
-        test_dataset.append((x,1))
-        x = shadow_path + '_hetero' + '/target_benign_%d.model'%i
-        test_dataset.append((x,0))
+    train_dataset, val_dataset, test_dataset = load_dataset(shadow_path, args.struc, args.troj_type,
+                                                            TRAIN_NUM, VAL_NUM, TEST_NUM)
 
 
     AUCs = []
@@ -89,7 +73,7 @@ if __name__ == '__main__':
             best_eval_auc = None
             test_info = None
             for _ in tqdm(range(N_EPOCH)):
-                epoch_meta_train(meta_model, father_model, optimizer, train_dataset, is_discrete=is_discrete, threshold='half')
+                epoch_meta_train(meta_model, father_model, optimizer, train_dataset, input_size, is_discrete=is_discrete, threshold='half')
                 eval_loss, eval_auc, eval_acc = epoch_meta_eval(meta_model, father_model, val_dataset, is_discrete=is_discrete, threshold='half')
                 if best_eval_auc is None or eval_auc > best_eval_auc:
                     best_eval_auc = eval_auc

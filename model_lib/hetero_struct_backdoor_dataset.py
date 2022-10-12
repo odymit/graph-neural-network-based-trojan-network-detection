@@ -1,26 +1,31 @@
+from fileinput import filename
 from dgl.data.dgl_dataset import DGLBuiltinDataset
-from model_lib.mnist_cnn_model import Model0 as Model
+from numpy import dtype
+from sklearn import datasets
 import model_lib.mnist_cnn_model as father_model
-
 import os 
 import re
 import torch
+import json
 from torch import nn
 import dgl
+import random
 from utils_gnn import cnn2graph
-import json
 
-class HomoStrucBackdoorDataset(DGLBuiltinDataset):
-    def __init__(self, mode='train', raw_dir='/home/ubuntu/date/hdd4/shadow_model_ckpt/mnist/models/',
-                 force_reload=False, verbose=False, transform=None):
+class HeteroStrucBackdoorDataset(DGLBuiltinDataset):
+    def __init__(self, mode='train', raw_dir='/home/ubuntu/date/hdd4/shadow_model_ckpt/mnist/models',
+                 force_reload=False, verbose=False, transform=None, seed=1024):
         mode = mode.lower()
         assert mode in ['train', 'valid', 'test'], "Mode not valid."
         self.mode = mode    
         self.x = []
         self.y = []
         _url = None
+        random.seed(seed)
+        self.ntypes = 6
+        self.model_nums = 2048
         
-        super(HomoStrucBackdoorDataset, self).__init__(name='HomoBackdoorDT',
+        super(HeteroStrucBackdoorDataset, self).__init__(name='HeteroBackdoorDT',
                                            raw_dir=raw_dir,
                                            force_reload=force_reload,
                                            verbose=verbose,
@@ -28,7 +33,13 @@ class HomoStrucBackdoorDataset(DGLBuiltinDataset):
                                            transform=transform)
         self.load()
         
-        
+    
+    def randtype(self):
+        randint = int(random.random() * self.ntypes)
+        while(randint not in [0, 1, 5]):
+            randint = int(random.random() * self.ntypes)
+        return str(randint)
+
     def process(self):
         pass
     
@@ -37,7 +48,13 @@ class HomoStrucBackdoorDataset(DGLBuiltinDataset):
     
     def load(self):
         '''load dataset info'''
-        
+        for idx in range(self.model_nums):
+            filename = "shadow_benign_%d.model" % idx
+            self.add_x_y(self.randtype(), filename)
+            filename = "shadow_jumbo_%d.model" % idx
+            self.add_x_y(self.randtype(), filename)
+            
+    def add_x_y(self, model_type, filename):            
         for filename in os.listdir(self.raw_dir):
             if '.model' not in filename:
                 # not a model
@@ -47,19 +64,19 @@ class HomoStrucBackdoorDataset(DGLBuiltinDataset):
             if self.mode == 'train':
                 if int(idx[0]) < 2048 and 'target' not in filename:
                     # is a training model
-                    self.x.append(filename)
+                    self.x.append([model_type, filename])
                 else:
                     continue
                 # print(filename)
             elif self.mode == 'valid':
                 if int(idx[0]) >= 2048 and 'target' not in filename:
-                    self.x.append(filename)
+                    self.x.append([model_type, filename])
                 else:
                     continue
             else:
                 # self.mode == 'test'
                 if 'target' in filename:# and 'B' not in filename
-                    self.x.append(filename)
+                    self.x.append([model_type, filename])
                 else:
                     continue
             # add co
@@ -83,13 +100,9 @@ class HomoStrucBackdoorDataset(DGLBuiltinDataset):
     def iter_y(self):
         for y in self.y:
             yield y
-
-    def load_spec_model(self, module, model_index):
-        model = getattr(module, 'Model'+model_index)
-        return model
             
     def is_correct_labeled(self):
-        x = self.x
+        _, x = zip(self.x)
         y = self.y
         cnt = 0
         error = 0
@@ -104,13 +117,19 @@ class HomoStrucBackdoorDataset(DGLBuiltinDataset):
             return False
         else:
             return True
+    def load_spec_model(self, module, model_index):
+        model = getattr(module, 'Model'+model_index)
+        return model
+    
         
     def load_g(self, idx):
-        x = os.path.join(self.raw_dir, self.x[idx])
+        x = os.path.join(self.raw_dir+self.x[idx][0], self.x[idx][1])
         y = self.y[idx]
-    #         print(label)
+
+        # print(x)
         CUDA_LAUNCH_BLOCKING=1
-        Model = self.load_spec_model(father_model, '0')
+        # load model 
+        Model = self.load_spec_model(father_model, self.x[idx][0])
         model = Model().cuda()
         params = torch.load(x)
         model.load_state_dict(params)
@@ -128,8 +147,9 @@ class HomoStrucBackdoorDataset(DGLBuiltinDataset):
         elif 'cifar10' in x:
             dataset_type = 'cifar10'
         
+        # get model type id
+        id = self.x[idx][0]
 
         # load graph as dgl graph
-        g = cnn2graph(model, model_detail['mnist']['0'])
+        g = cnn2graph(model, model_detail[dataset_type][id])
         return g, y
- 

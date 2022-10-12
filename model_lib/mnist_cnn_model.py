@@ -122,11 +122,11 @@ class Model2(nn.Module):
         self.name = 'Model2'
 
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
-        self.conv2 = nn.Conv2d(32, 16, kernel_size=5)
-        self.fc1 = nn.Linear(10 * 10 * 16, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 32)
-        self.output = nn.Linear(32, 10)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=5)
+        self.fc = nn.Linear(3 * 3 * 64, 256)
+        self.fc1 = nn.Linear(256, 120)
+        self.output = nn.Linear(120, 10)
 
         if gpu:
             self.cuda()
@@ -138,11 +138,12 @@ class Model2(nn.Module):
 
         x = F.relu(self.conv1(x))
         x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        x = x.view(-1, 10 * 10 * 16)
-        x = F.relu(self.fc1(x))
+        x = F.relu(F.max_pool2d(self.conv3(x), 2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = x.view(B, 3 * 3 * 64)
+        x = F.relu(self.fc(x))
         x = F.dropout(x, training=self.training)
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
+        x = self.fc1(x)
         x = self.output(x)
 
         return x
@@ -160,10 +161,10 @@ class Model3(nn.Module):
 
         self.conv1 = nn.Conv2d(1, 64, kernel_size=3)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3)
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=3)
+        self.conv3 = nn.Conv2d(128, 16, kernel_size=3)
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.adap = nn.AdaptiveAvgPool2d(output_size=(6, 6))
-        self.fc1 = nn.Linear(256 * 3 * 3, 120)
+        self.fc1 = nn.Linear(16 * 3 * 3, 120)
         self.fc2 = nn.Linear(120, 84)
         self.output = nn.Linear(84, 10)
 
@@ -179,7 +180,7 @@ class Model3(nn.Module):
         x = self.max_pool(F.relu(self.conv2(x)))
         x = F.dropout(x, p=0.5, training=self.training)
         x = F.relu(self.conv3(x))
-        x = F.relu(self.fc1(x.view(B, 3 * 3 * 256)))
+        x = F.relu(self.fc1(x.view(B, 3 * 3 * 16)))
         x = F.relu(self.fc2(x))
         x = self.output(x)
 
@@ -202,8 +203,8 @@ class Model4(nn.Module):
         self.conv3 = nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1)
         self.conv4 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1)
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.adap = nn.AdaptiveAvgPool2d(output_size=(6, 6))
-        self.fc = nn.Linear(32 * 6 * 6, 512)
+        self.adap = nn.AdaptiveAvgPool2d(output_size=(4, 4))
+        self.fc = nn.Linear(32 * 4 * 4, 512)
         self.output = nn.Linear(512, 10)
 
         if gpu:
@@ -219,7 +220,7 @@ class Model4(nn.Module):
         x = F.relu(self.conv3(x))
         x = self.max_pool(F.relu(self.conv4(x)))
         x = self.adap(x)
-        x = F.relu(self.fc(x.view(-1, 32 * 6 * 6)))
+        x = F.relu(self.fc(x.view(-1, 32 * 4 * 4)))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.output(x)
 

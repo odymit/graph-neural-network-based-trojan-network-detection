@@ -10,4 +10,3 @@ if __name__ == '__main__':
     src_path_origin = shadow_path + '/models'
     src_path_hetero = shadow_path + '/models_hetero'
     dst_path = shadow_path + '/models_mixed'
-

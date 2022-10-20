@@ -12,6 +12,7 @@ from utils_basic import load_spec_model
 from sklearn.metrics import roc_auc_score
 from torchinfo import summary
 import torch.nn.functional as F
+from dgl.nn.pytorch.glob import SumPooling, AvgPooling, MaxPooling, SortPooling
 
 class MLP(nn.Module):
     """Construct two-layer MLP-type aggreator for GIN model"""
@@ -87,7 +88,7 @@ def split_fold10(labels, fold_idx=0):
     train_idx, valid_idx = idx_list[fold_idx]
     return train_idx, valid_idx
 
-def evaluate(dataloader, device, model):
+def evaluate(dataloader, device, model, threshold=None):
     model.eval()
     total = 0
     total_correct = 0
@@ -101,7 +102,10 @@ def evaluate(dataloader, device, model):
         feat = batched_graph.ndata.pop('x')
         total += len(labels)
         logits = model(batched_graph, feat.view(len(feat), -1))
-        _, predicted = torch.max(logits, 1)
+        if threshold:
+            predicted = (logits > threshold).astype(int)
+        else:
+            _, predicted = torch.max(logits, 1)
         total_correct += (predicted == labels).sum().item()
         m = predicted + labels
         total_tp += (m >= 2).sum().item()
@@ -236,40 +240,40 @@ def load_dataset(shadow_path, is_specific, troj_type, TRAIN_NUM, VAL_NUM, TEST_N
 
 
 
-def epoch_meta_train(meta_model, father_model, optimizer, dataset, input_size, threshold=0.0):
+# def epoch_meta_train(meta_model, father_model, optimizer, dataset, input_size, threshold=0.0):
 
-    meta_model.train()
+#     meta_model.train()
 
-    cum_loss = 0.0
-    preds = []
-    labs = []
-    perm = np.random.permutation(len(dataset))
-    for i in perm:
-        x, y, z = dataset[i]
-        basic_model = load_spec_model(father_model, z)
-        basic_model.train()
-        basic_model.load_state_dict(torch.load(x))
-        # if is_discrete:
-        #     out = basic_model.emb_forward(meta_model.inp)
-        # else:
-        #     out = basic_model.forward(meta_model.inp)
-        graph = cnn2graph(basic_model, input_size)
-        score = meta_model.forward(graph)
-        l = meta_model.loss(score, y)
+#     cum_loss = 0.0
+#     preds = []
+#     labs = []
+#     perm = np.random.permutation(len(dataset))
+#     for i in perm:
+#         x, y, z = dataset[i]
+#         basic_model = load_spec_model(father_model, z)
+#         basic_model.train()
+#         basic_model.load_state_dict(torch.load(x))
+#         # if is_discrete:
+#         #     out = basic_model.emb_forward(meta_model.inp)
+#         # else:
+#         #     out = basic_model.forward(meta_model.inp)
+#         graph = cnn2graph(basic_model, input_size)
+#         score = meta_model.forward(graph)
+#         l = meta_model.loss(score, y)
 
-        optimizer.zero_grad()
-        l.backward()
-        optimizer.step()
+#         optimizer.zero_grad()
+#         l.backward()
+#         optimizer.step()
 
-        cum_loss = cum_loss + l.item()
-        preds.append(score.item())
-        labs.append(y)
+#         cum_loss = cum_loss + l.item()
+#         preds.append(score.item())
+#         labs.append(y)
 
-    preds = np.array(preds)
-    labs = np.array(labs)
-    auc = roc_auc_score(labs, preds)
-    if threshold == 'half':
-        threshold = np.asscalar(np.median(preds))
-    acc = ( (preds>threshold) == labs ).mean()
+#     preds = np.array(preds)
+#     labs = np.array(labs)
+#     auc = roc_auc_score(labs, preds)
+#     if threshold == 'half':
+#         threshold = np.asscalar(np.median(preds))
+#     acc = ( (preds>threshold) == labs ).mean()
 
-    return cum_loss / len(dataset), auc, acc
+#     return cum_loss / len(dataset), auc, acc

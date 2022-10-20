@@ -1,82 +1,124 @@
+from curses import raw
+from tkinter import W
 import numpy as np
 import torch
-import torch.utils.data
-from utils_meta import load_model_setting, epoch_meta_train, epoch_meta_eval
-from meta_classifier import MetaClassifier
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torch.utils.data.sampler import SubsetRandomSampler
+from sklearn.model_selection import StratifiedKFold
+# from dgl.data import GINDataset
+from dgl.dataloading import GraphDataLoader
+from dgl.nn.pytorch.conv import GINConv
+from dgl.nn.pytorch.glob import SumPooling, AvgPooling, MaxPooling, SortPooling
 import argparse
 from tqdm import tqdm
-from utils_gnn import load_dataset
+from utils_gnn import SGN, split_fold10, evaluate, load_spec_model
+from model_lib.homo_struct_backdoor_dataset import HomoStrucBackdoorDataset
+from model_lib.hetero_struct_backdoor_dataset import HeteroStrucBackdoorDataset
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
-parser.add_argument('--troj_type', type=str, required=True, help='Specify the attack to evaluate. M: modification attack; B: blending attack.')
-parser.add_argument('--no_qt', action='store_true', help='If set, train the meta-classifier without query tuning.')
-parser.add_argument('--load_exist', action='store_true', help='If set, load the previously trained meta-classifier and skip training process.')
-parser.add_argument('--struc', type=str, required=False, help='Specify the structure same or not, same is 1, hetero is 0')
-# parser.add_argument('--model', type=str, required=False, help='Specify the model')
 
+def train(epochs, train_loader, val_loader, test_loader, device, model):
+    # loss function, optimizer and scheduler
+    loss_fcn = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.01)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+    info = {'train_acc':[], 'val_acc':[], 'test_acc':[], 
+            'train_tp':[], 'val_tp':[], 'test_tp':[],
+            'train_tn':[], 'val_tn':[], 'test_tn':[],
+            'train_fp':[], 'val_fp':[], 'test_fp':[],
+            'train_fn':[], 'val_fn':[], 'test_fn':[],
+            'loss':[]}
+    # training loop
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        for batch, (batched_graph, labels) in enumerate(tqdm(train_loader)):
+            batched_graph = batched_graph.to(device)
+            #print(batch, labels, type(labels))
+            labels = labels.to(device)
+            # print(labels)
+            feat = batched_graph.ndata.pop('x')
+            # print(feat.view(50,-1).shape)
+            logits = model(batched_graph, feat.view(len(feat), -1))
+            # print(logits)
+            # print(logits.shape, labels.shape)
+            loss = loss_fcn(logits, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        scheduler.step()
+        # acc, pre, rec, f1
+        train_acc, tp, tn, fp, fn  = evaluate(train_loader, device, model)
+        info['train_acc'].append(train_acc)
+        info['train_tp'].append(tp)
+        info['train_tn'].append(tn)
+        info['train_fp'].append(fp)
+        info['train_fn'].append(fn)
+        val_acc, tp, tn, fp, fn = evaluate(val_loader, device, model)
+        info['val_acc'].append(val_acc)
+        info['val_tp'].append(tp)
+        info['val_tn'].append(tn)
+        info['val_fp'].append(fp)
+        info['val_fn'].append(fn)
+        test_acc, tp, tn, fp, fn = evaluate(test_loader, device, model)
+        info['test_acc'].append(test_acc)
+        info['test_tp'].append(tp)
+        info['test_tn'].append(tn)
+        info['test_fp'].append(fp)
+        info['test_fn'].append(fn)
+        info['loss'].append(total_loss/(batch+1))
+
+        print("Epoch {:05d} | Loss {:.4f} | Train Acc. {:.4f} | Validation Acc. {:.4f}| Test Acc. {:.4f} "
+              . format(epoch, total_loss / (batch + 1), train_acc, val_acc, test_acc))
+        
+    from datetime import datetime
+    import json
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d-%H:%M:%S")
+    with open('./intermediate_data/train-%s.json' % date, 'w') as f:
+        json.dump(info, f)
+        
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+#     parser.add_argument('--dataset', type=str, default="MUTAG",
+#                         choices=['MUTAG', 'PTC', 'NCI1', 'PROTEINS'],
+#                         help='name of dataset (default: MUTAG)')
+    parser.add_argument('--pooling', type=str, default='sum', choices=['sum', 'avg', 'max'], help='pooling method, default:sum')
+    parser.add_argument('--model', type=str, default='SGN', choices=['SGN'], help='choose a graph classification model')
+    parser.add_argument('--struct', type=str, default='homo', choices=['homo', 'hetero'])
+
     args = parser.parse_args()
-    assert args.troj_type in ('M', 'B'), 'unknown trojan pattern'
+    print(f'Training with DGL built-in GINConv module with a fixed epsilon = 0')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # load and split dataset
+    # dataset = GINDataset(args.dataset, self_loop=True, degree_as_nlabel=False) # add self_loop and disable one-hot encoding for input features
+    if args.struct == 'homo':
+        Dataset = HomoStrucBackdoorDataset
+    elif args.struct == 'hetero':
+        Dataset = HeteroStrucBackdoorDataset
+    dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/')
+    val_dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/', mode='valid')
+    test_dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/', mode='test')
 
-    GPU = True
-    N_REPEAT = 5
-    N_EPOCH = 10
-    TRAIN_NUM = 2048
-    VAL_NUM = 256
-    TEST_NUM = 256
+    # train_idx, val_idx = split_fold10(labels)
+    # print(train_idx, val_idx)
+    
+    # create dataloader
+    train_loader = GraphDataLoader(dataset, batch_size=4, pin_memory=torch.cuda.is_available())
+    val_loader = GraphDataLoader(val_dataset, batch_size=4, pin_memory=torch.cuda.is_available())
+    test_loader = GraphDataLoader(test_dataset, batch_size=4, pin_memory=torch.cuda.is_available())
+    
+    # create GIN model
+    in_size = 512 * 513
+    #gin_dataset = GINDataset('MUTAG', self_loop=True, degree_as_nlabel=False) # add self_loop and disable one-hot encoding for input features
+    # print(gin_dataset.dim_nfeats)
+    out_size = 2
+    model = SGN(in_size, 16, out_size, pooling=args.pooling).to(device)
 
-    if args.no_qt:
-        save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s_no-qt.model' % args.task
-    else:
-        save_path = '/home/ubuntu/date/hdd4/meta_classifier_ckpt/%s.model' % args.task
-    shadow_path = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s/models' % args.task
-
-    father_model, input_size, class_num, inp_mean, inp_std, is_discrete = load_model_setting(args.task)
-    if inp_mean is not None:
-        inp_mean = torch.FloatTensor(inp_mean)
-        inp_std = torch.FloatTensor(inp_std)
-        if GPU:
-            inp_mean = inp_mean.cuda()
-            inp_std = inp_std.cuda()
-    print ("Task: %s; target Trojan type: %s; input size: %s; class num: %s"%(args.task, args.troj_type, input_size, class_num))
-
-    # two ways load dataset
-    # 1. same struct
-    # 2. multi struct
-
-    train_dataset = []
-    val_dataset = []
-    test_dataset = []
-    train_dataset, val_dataset, test_dataset = load_dataset(shadow_path, args.struc, args.troj_type,
-                                                            TRAIN_NUM, VAL_NUM, TEST_NUM)
-
-    AUCs = []
-    for i in range(N_REPEAT):
-        # shadow_model = Model(gpu=GPU)
-        # target_model = Model(gpu=GPU)
-        meta_model = MetaClassifier(input_size, class_num, gpu=GPU)
-        if inp_mean is not None:
-            #Initialize the input using data mean and std
-            init_inp = torch.zeros_like(meta_model.inp).normal_()*inp_std + inp_mean
-            meta_model.inp.data = init_inp
-        else:
-            meta_model.inp.data = meta_model.inp.data
-
-        if not args.load_exist:
-            print ("Training Meta Classifier %d/%d"%(i+1, N_REPEAT))
-            if args.no_qt:
-                print ("No query tuning.")
-                optimizer = torch.optim.Adam(list(meta_model.fc.parameters()) + list(meta_model.output.parameters()), lr=1e-3)
-            else:
-                optimizer = torch.optim.Adam(meta_model.parameters(), lr=1e-3)
-
-            best_eval_auc = None
-            test_info = None
-            for _ in tqdm(range(N_EPOCH)):
-                epoch_meta_train(meta_model, father_model, optimizer, train_dataset, is_discrete=is_discrete, threshold='half')
-                eval_loss, eval_auc, eval_acc = epoch_meta_eval(meta_model, father_model, val_dataset, is_discrete=is_discrete, threshold='half')
-                if best_eval_auc is None or eval_auc > best_eval_auc:
-                    best_eval_auc = eval_auc
-                    test_info = epoch_meta_eval(meta_model, father_model, test_dataset, is_discrete=is_discrete, threshold='half')
-                    torch.save(meta_model.state_dict(), save_path+'_%d'%i)
+    # model training/validating
+    print('Training Procedure...')
+    train(100, train_loader, val_loader, test_loader, device, model)
+    

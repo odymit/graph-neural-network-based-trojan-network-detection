@@ -44,7 +44,7 @@ if __name__ == '__main__':
     target_indices = np.random.choice(tot_num, int(tot_num*TARGET_PROP))
     print ("Data indices owned by the defender:",shadow_indices)
 
-    SAVE_PREFIX = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s'%args.task
+    SAVE_PREFIX = args.save_dir+'/shadow_model_ckpt/%s'%args.task
     if not os.path.isdir(SAVE_PREFIX):
         os.mkdir(SAVE_PREFIX)
     if not os.path.isdir(SAVE_PREFIX+'/models'+args.model):

@@ -10,11 +10,12 @@ import json
 from torch import nn
 import dgl
 import random
-from utils_gnn import cnn2graph
+from utils_gnn import cnn2graph, cnn2graph_activation
 
 class HeteroStrucBackdoorDataset(DGLBuiltinDataset):
     def __init__(self, mode='train', raw_dir='/home/ubuntu/date/hdd4/shadow_model_ckpt/mnist/models',
-                 force_reload=False, verbose=False, transform=None, seed=1024):
+                 force_reload=False, verbose=False, transform=None, seed=1024, activation=False,
+                 nums=2048):
         mode = mode.lower()
         assert mode in ['train', 'valid', 'test'], "Mode not valid."
         self.mode = mode    
@@ -23,7 +24,8 @@ class HeteroStrucBackdoorDataset(DGLBuiltinDataset):
         _url = None
         random.seed(seed)
         self.ntypes = 6
-        self.model_nums = 2048
+        self.model_nums = nums
+        self.activation = activation
         
         super(HeteroStrucBackdoorDataset, self).__init__(name='HeteroBackdoorDT',
                                            raw_dir=raw_dir,
@@ -36,8 +38,8 @@ class HeteroStrucBackdoorDataset(DGLBuiltinDataset):
     
     def randtype(self):
         randint = int(random.random() * self.ntypes)
-        while(randint not in [0, 1, 5]):
-            randint = int(random.random() * self.ntypes)
+        # while(randint not in [0, 1, 5]):
+        #     randint = int(random.random() * self.ntypes)
         return str(randint)
 
     def process(self):
@@ -62,14 +64,14 @@ class HeteroStrucBackdoorDataset(DGLBuiltinDataset):
             idx_pattern = '[0-9]+'
             idx = re.findall(idx_pattern, filename)
             if self.mode == 'train':
-                if int(idx[0]) < 2048 and 'target' not in filename:
+                if int(idx[0]) < self.model_nums and 'target' not in filename:
                     # is a training model
                     self.x.append([model_type, filename])
                 else:
                     continue
                 # print(filename)
             elif self.mode == 'valid':
-                if int(idx[0]) >= 2048 and 'target' not in filename:
+                if int(idx[0]) >= self.model_nums and 'target' not in filename:
                     self.x.append([model_type, filename])
                 else:
                     continue
@@ -151,5 +153,9 @@ class HeteroStrucBackdoorDataset(DGLBuiltinDataset):
         id = self.x[idx][0]
 
         # load graph as dgl graph
-        g = cnn2graph(model, model_detail[dataset_type][id])
+        g = None
+        if self.activation:
+            g = cnn2graph_activation(model, model_detail[dataset_type][id])
+        else:
+            g = cnn2graph(model, model_detail[dataset_type][id])
         return g, y

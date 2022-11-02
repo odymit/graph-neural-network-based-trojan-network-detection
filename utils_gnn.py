@@ -1,6 +1,7 @@
 import dgl
 from dgl.data import DGLDataset
 import os
+from tqdm import tqdm
 from dgl import save_graphs, load_graphs
 import torch
 import json
@@ -12,6 +13,7 @@ from utils_basic import load_spec_model
 from sklearn.metrics import roc_auc_score
 from torchinfo import summary
 import torch.nn.functional as F
+from dgl.nn.pytorch.conv import GINConv
 from dgl.nn.pytorch.glob import SumPooling, AvgPooling, MaxPooling, SortPooling
 
 class MLP(nn.Module):
@@ -102,10 +104,14 @@ def evaluate(dataloader, device, model, threshold=None):
         feat = batched_graph.ndata.pop('x')
         total += len(labels)
         logits = model(batched_graph, feat.view(len(feat), -1))
+        predicted = None
         if threshold:
-            predicted = (logits > threshold).astype(int)
+            predicted = (logits > threshold).cpu().numpy().astype(int)
+            predicted = torch.tensor(predicted).to(device)
         else:
             _, predicted = torch.max(logits, 1)
+        # print(predicted, labels)
+        print(logits.size(), predicted.size(), labels.size())
         total_correct += (predicted == labels).sum().item()
         m = predicted + labels
         total_tp += (m >= 2).sum().item()
@@ -113,6 +119,7 @@ def evaluate(dataloader, device, model, threshold=None):
         total_fp += (predicted > labels).sum().item()
         total_fn += (predicted < labels).sum().item()
         # print(m, predicted, labels, total_tp, total_tn, total_fp, total_fn)
+
     acc = 1.0 * total_correct / total
     # pre = 1.0 * total_tp / (total_tp + total_fp)
     # rec = 1.0 * total_tp / (total_tp + total_fn)
@@ -172,6 +179,89 @@ def cnn2graph(model, model_info):
     return g
 
 
+def cnn2graph_activation(model,  model_info):
+    layers = []
+    all_edges = []
+
+
+    node_layer_idx = []
+    all_node_feats = []
+    pre_node_size = []
+    node_params = []
+    all_bias_feats = []
+    pre_bias_size = []
+    
+    cnt = 0
+    with torch.no_grad():
+        for i in range(len(model_info)):
+            cur_layer_info = model_info[i]
+            cur_layer_node = []
+            
+            if 'conv' in cur_layer_info['name']:
+                # construct cur layer nodes
+                for weight, bias in zip(model.get_submodule(cur_layer_info['name']).weight, 
+                                        model.get_submodule(cur_layer_info['name']).bias):
+                    # print("cur layer info:", model.get_submodule(cur_layer_info['name']))
+                    cur_layer_node.append(cnt)
+                    cnt += 1
+                    node_layer_idx.append(i)
+                    # params 
+                    conv = model.get_submodule(cur_layer_info['name'])
+                    params = [conv.kernel_size, conv.stride, conv.padding]
+                    node_params.append(params)
+                    # print(params)
+                    # featue resize?
+                    w = weight[0]
+                    r, c = w.size()
+                    pre_node_size.append([r, c])
+                    all_node_feats.append(padding(w, 512, 512))
+                    b = bias.expand(1,1)
+                    r, c = b.size()
+                    # print("size:", b.size())
+                    pre_bias_size.append([r, c])
+                    all_bias_feats.append(padding(b, 1, 512))
+                    # print("conv weight:", w.shape)
+                    # bias
+                    # print("conv bias:", bias)
+            else:
+                # construct dense layer node
+                cur_layer_node.append(cnt)
+                cnt += 1
+                node_layer_idx.append(i)
+                params = [(0, 0), (0, 0), (0, 0)]
+                node_params.append(params)
+                # feature resize?
+                weight = model.get_submodule(cur_layer_info['name']).weight.t()
+                bias = model.get_submodule(cur_layer_info['name']).bias
+                w = weight
+                r, c = w.size()
+                pre_node_size.append([r, c])
+                all_node_feats.append(padding(w, 512, 512))
+                b = bias.expand(1,-1)
+                r, c = b.size()
+                # print("size:", b.size())
+                pre_bias_size.append([r, c])
+                all_bias_feats.append(padding(b, 1, 512))
+            layers.append(cur_layer_node)
+            
+    # get all edges
+    for idx in range(len(layers)):
+        if idx < len(layers) - 1:
+            edges = all_u_to_v(layers[idx], layers[idx+1])
+            all_edges += edges
+    
+    all_edges = torch.tensor(all_edges).t()
+    u, v = all_edges[0], all_edges[1]
+    g = dgl.graph((u,v)).to('cuda')
+    g.ndata['x'] = torch.stack(all_node_feats)
+    g.ndata['idx'] = torch.tensor(node_layer_idx).to('cuda')
+    g.ndata['node_size'] = torch.tensor(pre_node_size).to('cuda')
+    g.ndata['params'] = torch.tensor(node_params).to('cuda')
+    g.ndata['bias'] = torch.stack(all_bias_feats)
+    g.ndata['bias_size'] = torch.tensor(pre_bias_size).to('cuda')
+    
+    return g
+
 def padding(src: torch.Tensor, row: int, col: int):
     r, c = src.size()
     
@@ -199,6 +289,34 @@ def padding(src: torch.Tensor, row: int, col: int):
         cr = int((col - c) / 2)
    
     result = F.pad(input=src, pad=(cl, cr, rl, rr), mode='constant', value=0)
+    return result
+
+def unpadding(src: torch.Tensor, row: int, col: int):
+    r, c = src.size()
+    r, c, row, col = row, col, r, c
+    if r > row or c > col:
+        return None
+    
+    if (row - r) % 2 == 0:
+        rl = int((row - r) / 2)
+    else:
+        rl = int((row - r) / 2 + 1)
+    
+    rr = int((row - r) / 2)
+    if rr == 0:
+        rr = -row
+
+    if (col - c) % 2 == 0:
+        cl = int((col - c) / 2)
+    else:
+        cl = int((col - c) / 2 + 1)
+
+    cr = int((col - c) / 2)
+    if cr == 0:
+        cr = -col
+   
+    print(cl, cr, rl, rr)
+    result = src[rl:-rr, cl:-cr]
     return result
 
 def load_dataset(shadow_path, is_specific, troj_type, TRAIN_NUM, VAL_NUM, TEST_NUM):
@@ -239,41 +357,105 @@ def load_dataset(shadow_path, is_specific, troj_type, TRAIN_NUM, VAL_NUM, TEST_N
 
 
 
+class SGNACT(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, pooling='sum'):
+        super().__init__()
+        assert pooling in ['sum', 'avg', 'max'], "Not supported pooling method."
+        self.ginlayers = nn.ModuleList()
+        self.batch_norms = nn.ModuleList()
+        num_layers = 2
+        # five-layer GCN with two-layer MLP aggregator and sum-neighbor-pooling scheme
+        for layer in range(num_layers - 1): # excluding the input layer
+            if layer == 0:
+                mlp = MLP(input_dim, hidden_dim, hidden_dim)
+            else:
+                mlp = MLP(hidden_dim, hidden_dim, hidden_dim)
+            self.ginlayers.append(GINConv(mlp, learn_eps=False)) # set to True if learning epsilon
+            self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
+        # linear functions for graph sum poolings of output of each layer
+        self.linear_prediction = nn.ModuleList()
+        for layer in range(num_layers):
+            if layer == 0:
+                self.linear_prediction.append(nn.Linear(input_dim, output_dim))
+            else:
+                self.linear_prediction.append(nn.Linear(hidden_dim, output_dim))
+        self.drop = nn.Dropout(0.8)
+        if pooling == 'sum':
+            self.pool = SumPooling() # change to mean readout (AvgPooling) on social network datasets
+        elif pooling == 'avg':
+            self.pool = AvgPooling()
+        else:
+            self.pool = MaxPooling()
+#         self.topK = topK
+#         self.pool = SortPooling(topK)
+#         self.pool = AvgPooling()
+        
+    def forward(self, image, g, h):
+        # list of hidden representation at each layer (including the input layer)
+        # img_class = cnn_foward()
+        # gnn_class = gnn_foward()
+        # return img_class, gnn_class 
+        self.cnn_forward(image, g, h)
+        score_over_layer = self.gnn_forward(g, h)
+        return score_over_layer
+    
+    def cnn_forward(self, image, g, h):
+        # print("Image Got:", image)
+        # print("cnn_forward called!")
+        print(g.ndata)
+        g.ndata['activation'] = 1
+        input()
+        pass
 
-# def epoch_meta_train(meta_model, father_model, optimizer, dataset, input_size, threshold=0.0):
+    def gnn_forward(self, g, h):
+        hidden_rep = [h]
+        for i, layer in enumerate(self.ginlayers):
+            h = layer(g, h)
+            h = self.batch_norms[i](h)
+            h = F.relu(h)
+            hidden_rep.append(h)
+        score_over_layer = 0
+        # perform graph sum pooling over all nodes in each layer
+        for i, h in enumerate(hidden_rep):
+            pooled_h = self.pool(g, h)
+            score_over_layer += self.drop(self.linear_prediction[i](pooled_h)) 
+        return score_over_layer
 
-#     meta_model.train()
 
-#     cum_loss = 0.0
-#     preds = []
-#     labs = []
-#     perm = np.random.permutation(len(dataset))
-#     for i in perm:
-#         x, y, z = dataset[i]
-#         basic_model = load_spec_model(father_model, z)
-#         basic_model.train()
-#         basic_model.load_state_dict(torch.load(x))
-#         # if is_discrete:
-#         #     out = basic_model.emb_forward(meta_model.inp)
-#         # else:
-#         #     out = basic_model.forward(meta_model.inp)
-#         graph = cnn2graph(basic_model, input_size)
-#         score = meta_model.forward(graph)
-#         l = meta_model.loss(score, y)
+def evaluateACT(dataloader, device, model, threshold=None):
+    model.eval()
+    total = 0
+    total_correct = 0
+    total_tp = 0
+    total_fp = 0
+    total_tn = 0
+    total_fn = 0
+    for batch, (batched_graph, labels) in enumerate(tqdm(dataloader)):
+        batched_graph = batched_graph.to(device)
+        labels = labels.to(device)
+        feat = batched_graph.ndata.pop('x')
+        total += len(labels)
+        image = None
+        logits = model(image, batched_graph, feat.view(len(feat), -1))
+        predicted = None
+        if threshold:
+            predicted = (logits > threshold).cpu().numpy().astype(int)
+            predicted = torch.tensor(predicted).to(device)
+        else:
+            _, predicted = torch.max(logits, 1)
+        # print(predicted, labels)
+        print(logits.size(), predicted.size(), labels.size())
+        total_correct += (predicted == labels).sum().item()
+        m = predicted + labels
+        total_tp += (m >= 2).sum().item()
+        total_tn += (m == 0).sum().item()
+        total_fp += (predicted > labels).sum().item()
+        total_fn += (predicted < labels).sum().item()
+        # print(m, predicted, labels, total_tp, total_tn, total_fp, total_fn)
 
-#         optimizer.zero_grad()
-#         l.backward()
-#         optimizer.step()
-
-#         cum_loss = cum_loss + l.item()
-#         preds.append(score.item())
-#         labs.append(y)
-
-#     preds = np.array(preds)
-#     labs = np.array(labs)
-#     auc = roc_auc_score(labs, preds)
-#     if threshold == 'half':
-#         threshold = np.asscalar(np.median(preds))
-#     acc = ( (preds>threshold) == labs ).mean()
-
-#     return cum_loss / len(dataset), auc, acc
+    acc = 1.0 * total_correct / total
+    # pre = 1.0 * total_tp / (total_tp + total_fp)
+    # rec = 1.0 * total_tp / (total_tp + total_fn)
+    # f1 = 2.0 * pre * rec / (rec + rec)
+    # print(acc, pre, rec, f1)
+    return acc, total_tp, total_tn, total_fp, total_fn

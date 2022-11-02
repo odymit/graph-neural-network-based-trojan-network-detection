@@ -17,7 +17,7 @@ from dgl.nn.pytorch.conv import GINConv
 from dgl.nn.pytorch.glob import SumPooling, AvgPooling, MaxPooling, SortPooling
 import argparse
 from tqdm import tqdm
-from utils_gnn import SGN, split_fold10, evaluate, load_spec_model
+from utils_gnn import SGNACT, split_fold10, evaluateACT, load_spec_model
 from model_lib.homo_struct_backdoor_dataset import HomoStrucBackdoorDataset
 from model_lib.hetero_struct_backdoor_dataset import HeteroStrucBackdoorDataset
 
@@ -33,7 +33,6 @@ def train(epochs, train_loader, val_loader, test_loader, device, model):
             'train_tn':[], 'val_tn':[], 'test_tn':[],
             'train_fp':[], 'val_fp':[], 'test_fp':[],
             'train_fn':[], 'val_fn':[], 'test_fn':[],
-            'fpr': None, 'tpr': None, 'threshold': None,
             'loss':[]}
     # training loop
     for epoch in range(epochs):
@@ -53,7 +52,8 @@ def train(epochs, train_loader, val_loader, test_loader, device, model):
             # print(labels)
             feat = batched_graph.ndata.pop('x')
             # print(feat.view(50,-1).shape)
-            logits = model(batched_graph, feat.view(len(feat), -1))
+            image = None
+            logits = model(image, batched_graph, feat.view(len(feat), -1))
             # print("logits: ", logits)
             if pred_scores is not None:
                 inner_logits = torch.cat([logits.t()], dim=0)[0]
@@ -75,15 +75,11 @@ def train(epochs, train_loader, val_loader, test_loader, device, model):
         threshold = None
         with torch.no_grad():
             fpr, tpr, threshold = roc_curve(actual_labels.cpu(), pred_scores.cpu(), pos_label=1)
-            info['threshold'] = threshold
             threshold = threshold[(tpr - fpr).argmax()]
-            info['fpr'] = fpr
-            info['tpr'] = tpr
-            
 
         # print("threshold: ", threshold)
         # acc, pre, rec, f1
-        train_acc, tp, tn, fp, fn  = evaluate(train_loader, device, model, threshold)
+        train_acc, tp, tn, fp, fn  = evaluateACT(train_loader, device, model, threshold)
         # train_acc, tp, tn, fp, fn  = evaluate(train_loader, device, model)
         info['train_acc'].append(train_acc)
         info['train_tp'].append(tp)
@@ -135,9 +131,10 @@ if __name__ == '__main__':
         Dataset = HomoStrucBackdoorDataset
     elif args.struct == 'hetero':
         Dataset = HeteroStrucBackdoorDataset
-    dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/')
+    dataset = Dataset(nums=10, raw_dir='./shadow_model_ckpt/mnist/models', activation=True)
     val_dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/', mode='valid')
     test_dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/', mode='test')
+    print("train_dataset: %d" % len(dataset))
     print("val_dataset: %d" % len(val_dataset))
     print("test_dataset: %d" % len(test_dataset))
 
@@ -145,16 +142,16 @@ if __name__ == '__main__':
     # print(train_idx, val_idx)
     
     # create dataloader
-    train_loader = GraphDataLoader(dataset, batch_size=4, pin_memory=torch.cuda.is_available())
-    val_loader = GraphDataLoader(val_dataset, batch_size=4, pin_memory=torch.cuda.is_available())
-    test_loader = GraphDataLoader(test_dataset, batch_size=4, pin_memory=torch.cuda.is_available())
+    train_loader = GraphDataLoader(dataset, batch_size=1, pin_memory=torch.cuda.is_available())
+    val_loader = GraphDataLoader(val_dataset, batch_size=1, pin_memory=torch.cuda.is_available())
+    test_loader = GraphDataLoader(test_dataset, batch_size=1, pin_memory=torch.cuda.is_available())
     
     # create GIN model
-    in_size = 512 * 513
+    in_size = 512 * 512
     #gin_dataset = GINDataset('MUTAG', self_loop=True, degree_as_nlabel=False) # add self_loop and disable one-hot encoding for input features
     # print(gin_dataset.dim_nfeats)
     out_size = 1
-    model = SGN(in_size, 16, out_size, pooling=args.pooling).to(device)
+    model = SGNACT(in_size, 16, out_size, pooling=args.pooling).to(device)
 
     # model training/validating
     print('Training Procedure...')

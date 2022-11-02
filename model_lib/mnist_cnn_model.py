@@ -137,7 +137,7 @@ class Model2(nn.Module):
         B = x.size()[0]
 
         x = F.relu(self.conv1(x))
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))          # not cathed
         x = F.relu(F.max_pool2d(self.conv3(x), 2))
         x = F.dropout(x, p=0.5, training=self.training)
         x = x.view(B, 3 * 3 * 64)
@@ -163,7 +163,6 @@ class Model3(nn.Module):
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3)
         self.conv3 = nn.Conv2d(128, 16, kernel_size=3)
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.adap = nn.AdaptiveAvgPool2d(output_size=(6, 6))
         self.fc1 = nn.Linear(16 * 3 * 3, 120)
         self.fc2 = nn.Linear(120, 84)
         self.output = nn.Linear(84, 10)
@@ -203,8 +202,7 @@ class Model4(nn.Module):
         self.conv3 = nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1)
         self.conv4 = nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1)
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.adap = nn.AdaptiveAvgPool2d(output_size=(4, 4))
-        self.fc = nn.Linear(32 * 4 * 4, 512)
+        self.fc = nn.Linear(32 * 2 * 2, 512)
         self.output = nn.Linear(512, 10)
 
         if gpu:
@@ -219,8 +217,7 @@ class Model4(nn.Module):
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
         x = self.max_pool(F.relu(self.conv4(x)))
-        x = self.adap(x)
-        x = F.relu(self.fc(x.view(-1, 32 * 4 * 4)))
+        x = F.relu(self.fc(x.view(-1, 32 * 2 * 2)))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.output(x)
 
@@ -264,6 +261,52 @@ class Model5(nn.Module):
         x = self.output(x)
 
         return x
+
+    def loss(self, pred, label):
+        if self.gpu:
+            label = label.cuda()
+        return F.cross_entropy(pred, label)
+
+
+class Model6(nn.Module):
+    def __init__(self, gpu=False):
+        super(Model6, self).__init__()
+        self.gpu = gpu
+        self.name = 'Model6'
+
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5, stride=1, padding=2)
+        self.conv3 = nn.Conv2d(32, 16, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(16, 8, kernel_size=3, stride=1, padding=1)
+        self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(7 * 7 * 8, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.output = nn.Linear(128, 10)
+
+        if gpu:
+            self.cuda()
+
+    def forward(self, x):
+        intermediate_results = []
+        if self.gpu:
+            x = x.cuda()
+        B = x.size()[0]
+
+        x = F.relu(self.conv1(x))
+        intermediate_results.append(x)
+        x = self.max_pool(F.relu(self.conv2(x)))
+        intermediate_results.append(x)
+        x = F.relu(self.conv3(x))
+        intermediate_results.append(x)
+        x = self.max_pool(F.relu(self.conv4(x)))
+        intermediate_results.append(x)
+        x = F.relu(self.fc1(x.view(B, 7 * 7 * 8)))
+        intermediate_results.append(x)
+        x = F.relu(self.fc2(x))
+        intermediate_results.append(x)
+        x = self.output(x)
+
+        return x, intermediate_results
 
     def loss(self, pred, label):
         if self.gpu:

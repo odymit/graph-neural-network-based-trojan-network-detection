@@ -1,3 +1,4 @@
+from torch.utils.data import dataset
 from ..hetero_struct_backdoor_dataset import HeteroStrucBackdoorDataset
 from ..homo_struct_backdoor_dataset import HomoStrucBackdoorDataset
 
@@ -11,12 +12,13 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1,2,3'
 
 
 def test_hetero():
-    dataset = HeteroStrucBackdoorDataset()
+    dataset = HeteroStrucBackdoorDataset(nums=10)
     dataloader = GraphDataLoader(dataset, batch_size=4, pin_memory=torch.cuda.is_available())
     for batch, (batched_graph, labels) in enumerate(dataloader):
         assert batch == 0
         assert isinstance(batched_graph, DGLHeteroGraph)
         break
+    assert len(dataset) == 10
 
 
 def test_homo():
@@ -26,3 +28,4 @@ def test_homo():
         assert batch == 0
         assert isinstance(batched_graph, DGLHeteroGraph)
         break
+s

@@ -15,3 +15,5 @@ raw_data/rt_polarity/*
 
 .idea/
 .ipynb_checkpoints/
+
+intermediate_data/*

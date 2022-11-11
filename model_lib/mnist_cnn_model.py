@@ -124,6 +124,7 @@ class Model2(nn.Module):
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
         self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
         self.conv3 = nn.Conv2d(32, 64, kernel_size=5)
+        self.max_pool = nn.MaxPool2d(kernel_size=2)
         self.fc = nn.Linear(3 * 3 * 64, 256)
         self.fc1 = nn.Linear(256, 120)
         self.output = nn.Linear(120, 10)
@@ -137,8 +138,8 @@ class Model2(nn.Module):
         B = x.size()[0]
 
         x = F.relu(self.conv1(x))
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))          # not cathed
-        x = F.relu(F.max_pool2d(self.conv3(x), 2))
+        x = F.relu(self.max_pool(self.conv2(x)))          # not cathed
+        x = F.relu(self.max_pool(self.conv3(x)))
         x = F.dropout(x, p=0.5, training=self.training)
         x = x.view(B, 3 * 3 * 64)
         x = F.relu(self.fc(x))
@@ -287,26 +288,45 @@ class Model6(nn.Module):
             self.cuda()
 
     def forward(self, x):
-        intermediate_results = []
         if self.gpu:
             x = x.cuda()
         B = x.size()[0]
 
-        x = F.relu(self.conv1(x))
-        intermediate_results.append(x)
-        x = self.max_pool(F.relu(self.conv2(x)))
-        intermediate_results.append(x)
-        x = F.relu(self.conv3(x))
-        intermediate_results.append(x)
-        x = self.max_pool(F.relu(self.conv4(x)))
-        intermediate_results.append(x)
+        params = {}
+
+        conv1 = {"in": x.tolist()}
+        x = self.conv1(x)
+        conv1["out"] = x.tolist()
+        x = F.relu(x)
+        conv1["relu"] = x.tolist()
+        params["conv1"] = conv1
+        conv2 = {"in": x.tolist()}
+        x = self.conv2(x)
+        conv2["out"] = x.tolist()
+        x = F.relu(x)
+        conv2["relu"] = x.tolist()
+        x = self.max_pool(x)
+        conv2["pool"] = x.tolist()
+        params["conv2"] = conv2
+        conv3 = {"in": x.tolist()}
+        x = self.conv3(x)
+        conv3["out"] = x.tolist()
+        x = F.relu(x)
+        conv3["relu"] = x.tolist()
+        params["conv3"] = conv3
+        conv4 = {"in": x.tolist()}
+        x = self.conv4(x)
+        conv4["out"] = x.tolist()
+        x = F.relu(x)
+        conv4["relu"] = x.tolist()
+        x = self.max_pool(x)
+        conv4["pool"] = x.tolist()
+        params["conv4"] = conv4
         x = F.relu(self.fc1(x.view(B, 7 * 7 * 8)))
-        intermediate_results.append(x)
         x = F.relu(self.fc2(x))
-        intermediate_results.append(x)
         x = self.output(x)
 
-        return x, intermediate_results
+        return x, params
 
     def loss(self, pred, label):
         if self.gpu:

@@ -179,7 +179,11 @@ def cnn2graph(model, model_info):
     return g
 
 
-def cnn2graph_activation(model,  model_info):
+def cnn2graph_activation(model, model_info):
+    # convert cnn model to a dgl graph
+    # model: model weight data
+    # model_info: model struct info
+    
     layers = []
     all_edges = []
 
@@ -190,13 +194,24 @@ def cnn2graph_activation(model,  model_info):
     node_params = []
     all_bias_feats = []
     pre_bias_size = []
+    node_layer_num = []
+
+    pooling = []
     
+    input_layer = True
+    concat_layer = True
+    idx = 0
     cnt = 0
     with torch.no_grad():
         for i in range(len(model_info)):
             cur_layer_info = model_info[i]
+            pooling_info = cur_layer_info['maxpool']
+            print(pooling_info)
             cur_layer_node = []
-            
+            if not input_layer and idx == 0:
+                idx += 1
+            if input_layer:
+                input_layer = False
             if 'conv' in cur_layer_info['name']:
                 # construct cur layer nodes
                 for weight, bias in zip(model.get_submodule(cur_layer_info['name']).weight, 
@@ -204,7 +219,13 @@ def cnn2graph_activation(model,  model_info):
                     # print("cur layer info:", model.get_submodule(cur_layer_info['name']))
                     cur_layer_node.append(cnt)
                     cnt += 1
-                    node_layer_idx.append(i)
+                    if pooling_info:
+                        pooling.append([pooling_info['kernel_size'], pooling_info['stride'],
+                        pooling_info['padding'], pooling_info['dilation'], int(pooling_info['ceil_mode'])])
+                    else:
+                        pooling.append([0, 0, 0, 0, 0])
+                    node_layer_idx.append(idx)
+                    node_layer_num.append(0)
                     # params 
                     conv = model.get_submodule(cur_layer_info['name'])
                     params = [conv.kernel_size, conv.stride, conv.padding]
@@ -225,9 +246,17 @@ def cnn2graph_activation(model,  model_info):
                     # print("conv bias:", bias)
             else:
                 # construct dense layer node
+                pooling.append([0, 0, 0, 0, 0])
+                node_layer_num.append(1)
                 cur_layer_node.append(cnt)
                 cnt += 1
-                node_layer_idx.append(i)
+                if concat_layer:
+                    idx += 1
+                    concat_layer = False
+                    node_layer_idx.append(idx)
+                    idx += 1
+                else:
+                    node_layer_idx.append(idx)
                 params = [(0, 0), (0, 0), (0, 0)]
                 node_params.append(params)
                 # feature resize?
@@ -254,14 +283,25 @@ def cnn2graph_activation(model,  model_info):
     u, v = all_edges[0], all_edges[1]
     g = dgl.graph((u,v)).to('cuda')
     g.ndata['x'] = torch.stack(all_node_feats)
-    g.ndata['idx'] = torch.tensor(node_layer_idx).to('cuda')
+    # tag for message transmission process
+    g.ndata['tag'] = torch.tensor(node_layer_idx).to('cuda')
+    # layer for layer type, 0 for conv, 1 for full connect
+    g.ndata['layer'] = torch.tensor(node_layer_num).to('cuda')
+    # acutal node size(kernel size or fc node size)
     g.ndata['node_size'] = torch.tensor(pre_node_size).to('cuda')
+    # params for conv kernel params 
     g.ndata['params'] = torch.tensor(node_params).to('cuda')
+    # bias weight
     g.ndata['bias'] = torch.stack(all_bias_feats)
+    # bias size
     g.ndata['bias_size'] = torch.tensor(pre_bias_size).to('cuda')
+    # pooling params
+    g.ndata['pooling'] = torch.tensor(pooling).to('cuda')
     
     return g
 
+
+    
 def padding(src: torch.Tensor, row: int, col: int):
     r, c = src.size()
     
@@ -403,7 +443,6 @@ class SGNACT(nn.Module):
         # print("Image Got:", image)
         # print("cnn_forward called!")
         print(g.ndata)
-        g.ndata['activation'] = 1
         input()
         pass
 

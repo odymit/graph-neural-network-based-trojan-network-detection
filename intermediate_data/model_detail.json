@@ -87,21 +87,21 @@
             },
             {
                 "name": "conv2",
-                "num": 16,
+                "num": 32,
+                "maxpool": null
+            },
+            {
+                "name": "conv3",
+                "num": 64,
+                "maxpool": null
+            },
+            {
+                "name": "fc",
+                "num": 1,
                 "maxpool": null
             },
             {
                 "name": "fc1",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc2",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc3",
                 "num": 1,
                 "maxpool": null
             },
@@ -136,14 +136,8 @@
             },
             {
                 "name": "conv3",
-                "num": 256,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
+                "num": 16,
+                "maxpool": null
             },
             {
                 "name": "fc1",
@@ -176,24 +170,12 @@
             {
                 "name": "conv2",
                 "num": 64,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
+                "maxpool": null
             },
             {
                 "name": "conv3",
                 "num": 32,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
+                "maxpool": null
             },
             {
                 "name": "conv4",
@@ -226,7 +208,13 @@
             {
                 "name": "conv2",
                 "num": 32,
-                "maxpool": null
+                "maxpool": {
+                    "kernel_size": 2,
+                    "stride": 2,
+                    "padding": 0,
+                    "dilation": 1,
+                    "ceil_mode": false
+                }
             },
             {
                 "name": "conv3",
@@ -236,7 +224,13 @@
             {
                 "name": "conv4",
                 "num": 8,
-                "maxpool": null
+                "maxpool": {
+                    "kernel_size": 2,
+                    "stride": 2,
+                    "padding": 0,
+                    "dilation": 1,
+                    "ceil_mode": false
+                }
             },
             {
                 "name": "fc1",
@@ -255,269 +249,7 @@
             }
         ]
     },
-    "cifar10": {
-        "0": [
-            {
-                "name": "conv1",
-                "num": 32,
-                "maxpool": null
-            },
-            {
-                "name": "conv2",
-                "num": 32,
-                "maxpool": null
-            },
-            {
-                "name": "conv3",
-                "num": 64,
-                "maxpool": null
-            },
-            {
-                "name": "conv4",
-                "num": 64,
-                "maxpool": null
-            },
-            {
-                "name": "linear",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "output",
-                "num": 1,
-                "maxpool": null
-            }
-        ],
-        "1": [
-            {
-                "name": "conv1",
-                "num": 6,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
-            },
-            {
-                "name": "conv2",
-                "num": 16,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
-            },
-            {
-                "name": "linear",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "output",
-                "num": 1,
-                "maxpool": null
-            }
-        ],
-        "2": [
-            {
-                "name": "conv1",
-                "num": 32,
-                "maxpool": null
-            },
-            {
-                "name": "conv2",
-                "num": 64,
-                "maxpool": null
-            },
-            {
-                "name": "conv3",
-                "num": 128,
-                "maxpool": null
-            },
-            {
-                "name": "conv4",
-                "num": 128,
-                "maxpool": null
-            },
-            {
-                "name": "conv5",
-                "num": 256,
-                "maxpool": null
-            },
-            {
-                "name": "conv6",
-                "num": 256,
-                "maxpool": null
-            },
-            {
-                "name": "linear",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "output",
-                "num": 1,
-                "maxpool": null
-            }
-        ],
-        "3": [
-            {
-                "name": "conv1",
-                "num": 32,
-                "maxpool": null
-            },
-            {
-                "name": "conv2",
-                "num": 32,
-                "maxpool": null
-            },
-            {
-                "name": "conv3",
-                "num": 64,
-                "maxpool": null
-            },
-            {
-                "name": "conv4",
-                "num": 64,
-                "maxpool": null
-            },
-            {
-                "name": "linear",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc1",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc2",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "output",
-                "num": 1,
-                "maxpool": null
-            }
-        ],
-        "4": [
-            {
-                "name": "conv1",
-                "num": 6,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
-            },
-            {
-                "name": "conv2",
-                "num": 16,
-                "maxpool": {
-                    "kernel_size": 2,
-                    "stride": 2,
-                    "padding": 0,
-                    "dilation": 1,
-                    "ceil_mode": false
-                }
-            },
-            {
-                "name": "linear",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc1",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc2",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "output",
-                "num": 1,
-                "maxpool": null
-            }
-        ],
-        "5": [
-            {
-                "name": "conv1",
-                "num": 32,
-                "maxpool": null
-            },
-            {
-                "name": "conv2",
-                "num": 64,
-                "maxpool": null
-            },
-            {
-                "name": "conv3",
-                "num": 128,
-                "maxpool": null
-            },
-            {
-                "name": "conv4",
-                "num": 128,
-                "maxpool": null
-            },
-            {
-                "name": "conv5",
-                "num": 256,
-                "maxpool": null
-            },
-            {
-                "name": "conv6",
-                "num": 256,
-                "maxpool": null
-            },
-            {
-                "name": "linear",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc1",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "fc2",
-                "num": 1,
-                "maxpool": null
-            },
-            {
-                "name": "output",
-                "num": 1,
-                "maxpool": null
-            }
-        ]
-    },
+    "cifar10": {},
     "max_size": [
         512,
         512

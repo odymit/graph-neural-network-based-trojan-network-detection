@@ -33,6 +33,7 @@ from model_lib.mnist_cnn_model import Model6 as Model
 model = Model(gpu=True)
 params = torch.load(x)
 model.load_state_dict(params)
+del params
 
 # load model detail 
 model_detail = {}
@@ -43,6 +44,7 @@ with open(model_detail_path, 'r') as f:
 # print(model_detail)
 g = cnn2graph_activation(model, model_detail['mnist']['5'])
 dgl.save_graphs('./intermediate_data/grapj_test.bin', g)
+del model_detail
 
 import torch
 import torchvision
@@ -69,7 +71,7 @@ for i, (x_in, y_in) in enumerate(dataloader):
     image = x_in
     label = y_in
     break
-
+del trainset, dataloader
 
 def conv(data, weight, bias, kernel_size, stride, padding):
     row, col = weight.size()
@@ -88,24 +90,26 @@ def conv(data, weight, bias, kernel_size, stride, padding):
     return padding(x[0][0], 512, 512)
 
 def maxpool(kernel_size, stride, padding):
-    pass
+    pass  
 
 def message_func(edges):
     print("this is message function.")
     print("message fucntion ends")
-    return {'pre': edges.src['x']}
+    return {'ft': edges.src['ft']}
+    # return {}
+
 
 def reduce_func(nodes):
     print("this is reduce function")
-    input_mask = nodes.data['tag'] == 0
-    conv_mask = nodes.data['tag'] == 1
-    concat_mask = nodes.data['tag'] == 2
-    fc_mask = nodes.data['tag'] == 3
+    # input_mask = nodes.data['tag'] == 0
+    # conv_mask = nodes.data['tag'] == 1
+    # concat_mask = nodes.data['tag'] == 2
+    # fc_mask = nodes.data['tag'] == 3
 
     # input_feat = nodes.data['x'][input_mask]
     # print(input_feat)
     print("reduce function ends")
-    return {'h': nodes.data['x']}
+    return {'ft': nodes.data['x']}
 
 
 def cnn_cal(graph):

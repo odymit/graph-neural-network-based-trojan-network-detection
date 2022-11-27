@@ -26,7 +26,8 @@ from utils_gnn import unpadding, padding
 
 
 
-x = '/home/dorian/repos/Meta-Nerual-Trojan-Detection/shadow_model_ckpt/mnist/models5/shadow_jumbo_9.model'
+# x = '/home/dorian/repos/Meta-Nerual-Trojan-Detection/shadow_model_ckpt/mnist/models5/shadow_jumbo_9.model'
+x = './shadow_model_ckpt/mnist/models5/shadow_jumbo_0.model'
 # load model 
 # Model = load_spec_model(father_model, '5')
 from model_lib.mnist_cnn_model import Model6 as Model
@@ -73,46 +74,41 @@ for i, (x_in, y_in) in enumerate(dataloader):
     break
 del trainset, dataloader
 
-def conv(data, weight, bias, kernel_size, stride, padding):
+def conv(in_channels, out_channels, data, weight, bias, kernel_size, stride, padding):
     row, col = weight.size()
     # get actual conv kernel weight and bias
     w = unpadding(weight, kernel_size, kernel_size)
     w = w.unsqueeze(0).unsqueeze(0)
     b = unpadding(bias, 1, 1)[0]
     # get conv operator 
-    operator = torch.nn.Conv2d(1, 1, kernel_size=kernel_size, stride=stride,
-                    padding=padding)
+    operator = torch.nn.Conv2d(in_channels, out_channels, 1, kernel_size=kernel_size, 
+                    stride=stride, padding=padding)
     # set conv operator weight and bias
     operator.weight.data = w
     operator.bias.data = b
     # conduct conv operation
     x = operator(data)
-    return padding(x[0][0], 512, 512)
+    return x
 
 def maxpool(kernel_size, stride, padding):
     pass  
 
-def message_func(edges):
-    print("this is message function.")
-    print("message fucntion ends")
-    return {'ft': edges.src['ft']}
-    # return {}
-
 
 def reduce_func(nodes):
     print("this is reduce function")
-    # input_mask = nodes.data['tag'] == 0
-    # conv_mask = nodes.data['tag'] == 1
-    # concat_mask = nodes.data['tag'] == 2
-    # fc_mask = nodes.data['tag'] == 3
-
     # input_feat = nodes.data['x'][input_mask]
     # print(input_feat)
     print("reduce function ends")
     return {'ft': nodes.data['x']}
 
 
-def cnn_cal(graph):
+def initiate_node_feature(graph):
+    ft = None 
+
+    graph.ndata['ft'] = ft
+
+def cnn_cal(graph, image):
+    initiate_node_feature(graph, image)
     graph.update_all(message_func=message_func, reduce_func=reduce_func)
     ft = graph.ndata['ft'][0]
     return ft

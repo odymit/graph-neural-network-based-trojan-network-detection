@@ -4,5 +4,6 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "editor.suggest.insertMode": "replace"
+    "editor.suggest.insertMode": "replace",
+    "python.analysis.typeCheckingMode": "off"
 }

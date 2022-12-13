@@ -111,7 +111,7 @@ def evaluate(dataloader, device, model, threshold=None):
         else:
             _, predicted = torch.max(logits, 1)
         # print(predicted, labels)
-        print(logits.size(), predicted.size(), labels.size())
+        # print(logits.size(), predicted.size(), labels.size())
         total_correct += (predicted == labels).sum().item()
         m = predicted + labels
         total_tp += (m >= 2).sum().item()
@@ -150,12 +150,18 @@ def cnn2graph(model, model_info):
             
             if 'conv' in cur_layer_info['name']:
                 # construct cur layer nodes
-                for weight, bias in zip(model.get_submodule(cur_layer_info['name']).weight, 
-                                        model.get_submodule(cur_layer_info['name']).bias):
+                weights = model.get_submodule(cur_layer_info['name']).weight
+                biass = model.get_submodule(cur_layer_info['name']).bias
+                n = len(biass)
+                for idx in range(n):
                     cur_layer_node.append(cnt)
                     cnt += 1
                     # featue resize?
-                    w = weight[0] + bias
+                    w = weights[idx]
+                    b = biass[idx]
+                    channels, width, height = w.size()
+                    assert channels * width * height <= 512 * 513, "channels * width * height <= 512 * 513"
+                    w = w.reshape(channels, width * height) + b
                     all_node_feats.append(padding(w, 512, 513))
             else:
                 # construct dense layer node
@@ -206,7 +212,7 @@ def cnn2graph_activation(model, model_info):
         for i in range(len(model_info)):
             cur_layer_info = model_info[i]
             pooling_info = cur_layer_info['maxpool']
-            print(pooling_info)
+            # print(pooling_info)
             cur_layer_node = []
             if not input_layer and idx == 0:
                 idx += 1
@@ -214,8 +220,10 @@ def cnn2graph_activation(model, model_info):
                 input_layer = False
             if 'conv' in cur_layer_info['name']:
                 # construct cur layer nodes
-                for weight, bias in zip(model.get_submodule(cur_layer_info['name']).weight, 
-                                        model.get_submodule(cur_layer_info['name']).bias):
+                weights = model.get_submodule(cur_layer_info['name']).weight
+                biass = model.get_submodule(cur_layer_info['name']).bias
+                n = len(biass)
+                for inner_idx in range(n):
                     # print("cur layer info:", model.get_submodule(cur_layer_info['name']))
                     cur_layer_node.append(cnt)
                     cnt += 1
@@ -232,11 +240,13 @@ def cnn2graph_activation(model, model_info):
                     node_params.append(params)
                     # print(params)
                     # featue resize?
-                    w = weight[0]
-                    r, c = w.size()
-                    pre_node_size.append([r, c])
+                    w = weights[inner_idx]
+                    channels, width, height = w.size()
+                    pre_node_size.append([channels, width, height])
+                    assert channels * width * height <= 512 * 512, "channels * width * height <= 512 * 512"
+                    w = w.reshape(channels, width * height)
                     all_node_feats.append(padding(w, 512, 512))
-                    b = bias.expand(1,1)
+                    b = biass[inner_idx].expand(1,1)
                     r, c = b.size()
                     # print("size:", b.size())
                     pre_bias_size.append([r, c])
@@ -264,7 +274,7 @@ def cnn2graph_activation(model, model_info):
                 bias = model.get_submodule(cur_layer_info['name']).bias
                 w = weight
                 r, c = w.size()
-                pre_node_size.append([r, c])
+                pre_node_size.append([1, r, c])
                 all_node_feats.append(padding(w, 512, 512))
                 b = bias.expand(1,-1)
                 r, c = b.size()
@@ -282,21 +292,21 @@ def cnn2graph_activation(model, model_info):
     all_edges = torch.tensor(all_edges).t()
     u, v = all_edges[0], all_edges[1]
     g = dgl.graph((u,v)).to('cuda')
-    g.ndata['x'] = torch.stack(all_node_feats)
+    g.ndata['kernel_weight'] = torch.stack(all_node_feats)
     # tag for message transmission process
     g.ndata['tag'] = torch.tensor(node_layer_idx).to('cuda')
     # layer for layer type, 0 for conv, 1 for full connect
     g.ndata['layer'] = torch.tensor(node_layer_num).to('cuda')
     # acutal node size(kernel size or fc node size)
-    g.ndata['node_size'] = torch.tensor(pre_node_size).to('cuda')
+    g.ndata['kernel_size'] = torch.tensor(pre_node_size).to('cuda')
     # params for conv kernel params 
-    g.ndata['params'] = torch.tensor(node_params).to('cuda')
+    g.ndata['kernel_params'] = torch.tensor(node_params).to('cuda')
     # bias weight
     g.ndata['bias'] = torch.stack(all_bias_feats)
     # bias size
     g.ndata['bias_size'] = torch.tensor(pre_bias_size).to('cuda')
     # pooling params
-    g.ndata['pooling'] = torch.tensor(pooling).to('cuda')
+    g.ndata['pooling_params'] = torch.tensor(pooling).to('cuda')
     
     return g
 
@@ -498,3 +508,13 @@ def evaluateACT(dataloader, device, model, threshold=None):
     # f1 = 2.0 * pre * rec / (rec + rec)
     # print(acc, pre, rec, f1)
     return acc, total_tp, total_tn, total_fp, total_fn
+
+def equals(x, y=None, zeros=False):
+    if zeros:
+        y = torch.zeros(x.size()).to("cuda")
+    
+    cmp_results = x == y
+    if cmp_results.all() == True:
+        return True
+    else:
+        return False

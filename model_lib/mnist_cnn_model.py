@@ -295,17 +295,17 @@ class Model6(nn.Module):
         params = {}
 
         conv1 = {"in": x.tolist()}
-        print("1 in 32 out:", x.size())
+        # print("1 in 32 out:", x.size())
         x = self.conv1(x)
-        print("conv1 weight size:", self.conv1.weight.size())
+        # print("conv1 weight size:", self.conv1.weight.size())
         conv1["out"] = x.tolist()
-        print("32 in 32 out", x.size())
+        # print("32 in 32 out", x.size())
         x = F.relu(x)
         conv1["relu"] = x.tolist()
         params["conv1"] = conv1
         conv2 = {"in": x.tolist()}
         x = self.conv2(x)
-        print("32 in 16 out:", x.size())
+        # print("32 in 16 out:", x.size())
         conv2["out"] = x.tolist()
         x = F.relu(x)
         conv2["relu"] = x.tolist()
@@ -314,7 +314,7 @@ class Model6(nn.Module):
         params["conv2"] = conv2
         conv3 = {"in": x.tolist()}
         x = self.conv3(x)
-        print("16 in 8 out:", x.size())
+        # print("16 in 8 out:", x.size())
         conv3["out"] = x.tolist()
         x = F.relu(x)
         conv3["relu"] = x.tolist()

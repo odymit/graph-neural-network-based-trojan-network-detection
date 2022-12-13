@@ -83,7 +83,7 @@ def train(epochs, train_loader, val_loader, test_loader, device, model):
 
         # print("threshold: ", threshold)
         # acc, pre, rec, f1
-        train_acc, tp, tn, fp, fn  = evaluate(train_loader, device, model, threshold)
+        train_acc, tp, tn, fp, fn  = evaluate(train_loader, device, model, threshold=threshold)
         # train_acc, tp, tn, fp, fn  = evaluate(train_loader, device, model)
         info['train_acc'].append(train_acc)
         info['train_tp'].append(tp)
@@ -135,9 +135,11 @@ if __name__ == '__main__':
         Dataset = HomoStrucBackdoorDataset
     elif args.struct == 'hetero':
         Dataset = HeteroStrucBackdoorDataset
-    dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/')
+    # dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/')
+    dataset = Dataset()
     val_dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/', mode='valid')
     test_dataset = Dataset(raw_dir='./shadow_model_ckpt/mnist/models/', mode='test')
+    print("train_dataset: %d" % len(dataset))
     print("val_dataset: %d" % len(val_dataset))
     print("test_dataset: %d" % len(test_dataset))
 

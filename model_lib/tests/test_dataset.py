@@ -11,14 +11,14 @@ from dgl.heterograph import DGLHeteroGraph
 os.environ["CUDA_VISIBLE_DEVICES"] = '1,2,3'
 
 
-def test_hetero():
-    dataset = HeteroStrucBackdoorDataset(nums=10)
-    dataloader = GraphDataLoader(dataset, batch_size=4, pin_memory=torch.cuda.is_available())
-    for batch, (batched_graph, labels) in enumerate(dataloader):
-        assert batch == 0
-        assert isinstance(batched_graph, DGLHeteroGraph)
-        break
-    assert len(dataset) == 10
+# def test_hetero():
+#     dataset = HeteroStrucBackdoorDataset(nums=10)
+#     dataloader = GraphDataLoader(dataset, batch_size=4, pin_memory=torch.cuda.is_available())
+#     for batch, (batched_graph, labels) in enumerate(dataloader):
+#         assert batch == 0
+#         assert isinstance(batched_graph, DGLHeteroGraph)
+#         break
+#     assert len(dataset) == 10
 
 
 def test_homo():
@@ -28,4 +28,3 @@ def test_homo():
         assert batch == 0
         assert isinstance(batched_graph, DGLHeteroGraph)
         break
-s

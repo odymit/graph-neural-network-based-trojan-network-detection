@@ -518,3 +518,18 @@ def equals(x, y=None, zeros=False):
         return True
     else:
         return False
+
+def prepare_data(rdata, rsize):
+    n = len(rdata)        
+    cur_size = rsize[0]
+    width, height = cur_size
+    width, height = int(width), int(height)
+    ret_data = torch.zeros((1, n, width, height)).to("cuda")
+    for idx in range(n):
+        cur_data = rdata[idx]
+        # convet (1, 1, 28, 28) to (1, width, height)
+        shaped_data = unpadding(cur_data.reshape(28, 28), width, height)
+        ret_data[0][idx] = shaped_data
+    # ret_data shape: (1, n, width, height)
+    return ret_data
+

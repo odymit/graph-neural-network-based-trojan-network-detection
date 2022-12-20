@@ -291,44 +291,19 @@ class Model6(nn.Module):
         if self.gpu:
             x = x.cuda()
         B = x.size()[0]
-
         params = {}
-
-        conv1 = {"in": x.tolist()}
-        # print("1 in 32 out:", x.size())
-        x = self.conv1(x)
-        # print("conv1 weight size:", self.conv1.weight.size())
-        conv1["out"] = x.tolist()
-        # print("32 in 32 out", x.size())
-        x = F.relu(x)
-        conv1["relu"] = x.tolist()
-        params["conv1"] = conv1
-        conv2 = {"in": x.tolist()}
-        x = self.conv2(x)
-        # print("32 in 16 out:", x.size())
-        conv2["out"] = x.tolist()
-        x = F.relu(x)
-        conv2["relu"] = x.tolist()
-        x = self.max_pool(x)
-        conv2["pool"] = x.tolist()
-        params["conv2"] = conv2
-        conv3 = {"in": x.tolist()}
-        x = self.conv3(x)
-        # print("16 in 8 out:", x.size())
-        conv3["out"] = x.tolist()
-        x = F.relu(x)
-        conv3["relu"] = x.tolist()
-        params["conv3"] = conv3
-        conv4 = {"in": x.tolist()}
-        x = self.conv4(x)
-        conv4["out"] = x.tolist()
-        x = F.relu(x)
-        conv4["relu"] = x.tolist()
-        x = self.max_pool(x)
-        conv4["pool"] = x.tolist()
-        params["conv4"] = conv4
+        x = F.relu(self.conv1(x))
+        params['conv1'] = x.tolist()
+        x = self.max_pool(F.relu(self.conv2(x)))
+        params['conv2'] = x.tolist()
+        x = F.relu(self.conv3(x))
+        params['conv3'] = x.tolist()
+        x = self.max_pool(F.relu(self.conv4(x)))
+        params['conv4'] = x.tolist()
         x = F.relu(self.fc1(x.view(B, 7 * 7 * 8)))
+        params['fc1'] = x.tolist()
         x = F.relu(self.fc2(x))
+        params['fc2'] = x.tolist()
         x = self.output(x)
 
         return x, params

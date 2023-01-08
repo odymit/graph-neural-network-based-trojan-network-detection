@@ -42,10 +42,11 @@ def test_unpadding_normal():
             c = padd_size[1]
             pad = padding(norm, r, c)
             unpad = unpadding(pad, row_o, col_o)
-            torch.save(unpad, './unpad.txt')
+            torch.save(unpad, './unpad-test-created.txt')
             row, col = unpad.size()
             assert row == row_o
             assert col == col_o
+            assert (norm == unpad).all() == True
 
     # one-dim case
     ones = torch.ones((1,1))
@@ -55,6 +56,7 @@ def test_unpadding_normal():
     row, col = unpad.size()
     assert row == 1
     assert col == 1
+    assert (ones == unpad).all() == True
     # full case
     ones = torch.ones((1,512))
     pad = padding(ones, 1, 512)
@@ -62,5 +64,6 @@ def test_unpadding_normal():
     row, col = unpad.size()
     assert row == 1
     assert col == 512
+    assert (ones == unpad).all() == True
 
 

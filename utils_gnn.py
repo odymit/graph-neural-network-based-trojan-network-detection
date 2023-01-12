@@ -204,8 +204,6 @@ def cnn2graph_activation(model, model_info):
 
     pooling = []
     
-    input_layer = True
-    concat_layer = True
     idx = 0
     cnt = 0
     with torch.no_grad():
@@ -214,10 +212,6 @@ def cnn2graph_activation(model, model_info):
             pooling_info = cur_layer_info['maxpool']
             # print(pooling_info)
             cur_layer_node = []
-            if not input_layer and idx == 0:
-                idx += 1
-            if input_layer:
-                input_layer = False
             if 'conv' in cur_layer_info['name']:
                 # construct cur layer nodes
                 weights = model.get_submodule(cur_layer_info['name']).weight
@@ -254,19 +248,15 @@ def cnn2graph_activation(model, model_info):
                     # print("conv weight:", w.shape)
                     # bias
                     # print("conv bias:", bias)
+                idx += 1
             else:
                 # construct dense layer node
                 pooling.append([0, 0, 0, 0, 0])
                 node_layer_num.append(1)
                 cur_layer_node.append(cnt)
                 cnt += 1
-                if concat_layer:
-                    idx += 1
-                    concat_layer = False
-                    node_layer_idx.append(idx)
-                    idx += 1
-                else:
-                    node_layer_idx.append(idx)
+                node_layer_idx.append(idx)
+                idx += 1
                 params = [(0, 0), (0, 0), (0, 0)]
                 node_params.append(params)
                 # feature resize?
@@ -294,9 +284,9 @@ def cnn2graph_activation(model, model_info):
     g = dgl.graph((u,v)).to('cuda')
     g.ndata['kernel_weight'] = torch.stack(all_node_feats)
     # tag for message transmission process
-    g.ndata['tag'] = torch.tensor(node_layer_idx).to('cuda')
+    g.ndata['layer_idx'] = torch.tensor(node_layer_idx).to('cuda')
     # layer for layer type, 0 for conv, 1 for full connect
-    g.ndata['layer'] = torch.tensor(node_layer_num).to('cuda')
+    g.ndata['layer_type'] = torch.tensor(node_layer_num).to('cuda')
     # acutal node size(kernel size or fc node size)
     g.ndata['kernel_size'] = torch.tensor(pre_node_size).to('cuda')
     # params for conv kernel params 
@@ -509,12 +499,12 @@ def evaluateACT(dataloader, device, model, threshold=None):
     # print(acc, pre, rec, f1)
     return acc, total_tp, total_tn, total_fp, total_fn
 
-def equals(x, y=None, zeros=False):
+def equals(x, y=None, zeros=False, precision=1e-5):
     if zeros:
         y = torch.zeros(x.size()).to("cuda")
     
-    cmp_results = x == y
-    if cmp_results.all() == True:
+    cmp_results = x - y
+    if (cmp_results <= precision).all() == True:
         return True
     else:
         return False

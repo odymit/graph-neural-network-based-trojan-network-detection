@@ -1,123 +1,159 @@
 import dgl
-import torch
-from utils_gnn import cnn2graph_activation
-# from model_lib import mnist_cnn_model as father_model
-from utils_basic import load_spec_model
-from utils_gnn import padding
-from dgl.data import DGLDataset
-import os
-from tqdm import tqdm
-from dgl import save_graphs, load_graphs
-import torch
-import json
-from torch import nn
 import numpy as np
-# from model_lib.mnist_cnn_model import Model
-from random import randint
-from utils_basic import load_spec_model
-from sklearn.metrics import roc_auc_score
-from torchinfo import summary
-import torch.nn.functional as F
-from dgl.nn.pytorch.conv import GINConv
-from dgl.nn.pytorch.glob import SumPooling, AvgPooling, MaxPooling, SortPooling
-from utils_gnn import MLP
-from utils_gnn import unpadding, padding
-
-
-
-
-# x = '/home/dorian/repos/Meta-Nerual-Trojan-Detection/shadow_model_ckpt/mnist/models5/shadow_jumbo_9.model'
-x = './shadow_model_ckpt/mnist/models5/shadow_jumbo_0.model'
-# load model 
-# Model = load_spec_model(father_model, '5')
-from model_lib.mnist_cnn_model import Model6 as Model
-model = Model(gpu=True)
-params = torch.load(x)
-model.load_state_dict(params)
-del params
-
-# load model detail 
-model_detail = {}
-model_detail_path = "./intermediate_data/model_detail.json"
-import json
-with open(model_detail_path, 'r') as f:
-    model_detail = json.load(f)
-# print(model_detail)
-g = cnn2graph_activation(model, model_detail['mnist']['5'])
-dgl.save_graphs('./intermediate_data/grapj_test.bin', g)
-del model_detail
-
 import torch
 import torchvision
 import torchvision.transforms as transforms
-# from utils_gnn import SGNACT
-GPU = True
-if GPU:
+from utils_basic import load_dataset_setting, eval_model, BackdoorDataset
+import os
+from datetime import datetime
+import json
+import argparse
+from utils_gnn import cnn2graph_activation
+from utils_activation import activation_passing
+from tqdm import tqdm
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--task', type=str, required=True, help='Specfiy the task (mnist/cifar10/audio/rtNLP).')
+parser.add_argument('--model', type=str, required=False, help='Specify the model')
+parser.add_argument('--n', type=str, required=False, help='train num on test model')
+parser.add_argument('--save_dir', type=str, required=False, help='specify the shadow model saved dir')
+
+class MyBackdoorDataset(BackdoorDataset):
+    def __getitem__(self, idx):
+        if (not self.mal_only and idx < len(self.choice)):
+            troj_label = 0
+            # Return non-trojaned data
+            if self.need_pad:
+                # In NLP task we need to pad input with length of Troj pattern
+                p_size = self.atk_setting[0]
+                X, y = self.src_dataset[self.choice[idx]]
+                X_padded = torch.cat([X, torch.LongTensor([0]*p_size)], dim=0)
+                return X_padded, y, troj_label
+            else:
+                X, y = self.src_dataset[self.choice[idx]]
+                return X, y, troj_label
+
+        troj_label = 1
+        if self.mal_only:
+            X, y = self.src_dataset[self.mal_choice[idx]]
+        else:
+            X, y = self.src_dataset[self.mal_choice[idx-len(self.choice)]]
+        X_new, y_new = self.troj_gen_func(X, y, self.atk_setting)
+        return X_new, y_new, troj_label
+
+
+def train_2class_classification_model(model, base_model, dataloader, epoch_num, is_binary, verbose=True):
+    model.train()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    for epoch in range(epoch_num):
+        for i,(x_in, y_in, troj_y_in) in enumerate(tqdm(dataloader)):
+            label = troj_y_in
+            # init a graph
+            g = get_graph(base_model)
+            # get message passed graph
+            message_passed_g = activation_passing(x_in, g)
+            # graph classification model learning 
+            logits = model(message_passed_g)
+            # TODO
+            pred_label = logits
+            loss = None
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+
+
+    return
+
+def get_base_model():
+    x = './shadow_model_ckpt/mnist/models5/shadow_jumbo_0.model'
+    # load model 
+    # Model = load_spec_model(father_model, '5')
+    from model_lib.mnist_cnn_model import Model6 as Model
+    model = Model(gpu=True)
+    params = torch.load(x)
+    model.load_state_dict(params)
+    del params
+    return model
+
+def get_graph(model):
+        # load model detail 
+        model_detail = {}
+        model_detail_path = "./intermediate_data/model_detail.json"
+        import json
+        with open(model_detail_path, 'r') as f:
+            model_detail = json.load(f)
+        # print(model_detail)
+        g = cnn2graph_activation(model, model_detail['mnist']['5'])
+        # dgl.save_graphs('./intermediate_data/grapj_test.bin', g)
+        del model_detail
+        return g 
+if __name__ == '__main__':
+    args = parser.parse_args()
+    if not args.model:
+        args.model = '0'
+    if not args.save_dir:
+        args.save_dir = './'
+
+    GPU = True
+    SHADOW_PROP = 0.02
+    TARGET_PROP = 0.5
+    # SHADOW_NUM = 2048+256
+    if args.n:
+        SHADOW_NUM = int(args.n)
+        TARGET_NUM = int(args.n)
+    else:
+        SHADOW_NUM = 2048+256
+        TARGET_NUM = 256
+    np.random.seed(0)
+    torch.manual_seed(0)
+    if GPU:
         torch.cuda.manual_seed_all(0)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        
-transform = transforms.Compose([
-            transforms.ToTensor(),
-        ])
-BATCH_SIZE = 1
-# MNIST image dataset 
-trainset = torchvision.datasets.MNIST(root='./raw_data/', train=True, download=True, transform=transform)
-dataloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE)
 
-# get a image
-image = None
-label = None
-for i, (x_in, y_in) in enumerate(dataloader):
-    image = x_in
-    label = y_in
-    break
-del trainset, dataloader
+    BATCH_SIZE, N_EPOCH, trainset, testset, is_binary, need_pad, Model, troj_gen_func, random_troj_setting = load_dataset_setting(args.task, args.model)
+    tot_num = len(trainset)
+    shadow_indices = np.random.choice(tot_num, int(tot_num*SHADOW_PROP))
+    target_indices = np.random.choice(tot_num, int(tot_num*TARGET_PROP))
+    print ("Data indices owned by the defender:",shadow_indices)
 
-def conv(in_channels, out_channels, data, weight, bias, kernel_size, stride, padding):
-    row, col = weight.size()
-    # get actual conv kernel weight and bias
-    w = unpadding(weight, kernel_size, kernel_size)
-    w = w.unsqueeze(0).unsqueeze(0)
-    b = unpadding(bias, 1, 1)[0]
-    # get conv operator 
-    operator = torch.nn.Conv2d(in_channels, out_channels, 1, kernel_size=kernel_size, 
-                    stride=stride, padding=padding)
-    # set conv operator weight and bias
-    operator.weight.data = w
-    operator.bias.data = b
-    # conduct conv operation
-    x = operator(data)
-    return x
+    # args.task = 'mnist'
+    SAVE_PREFIX = args.save_dir+'/shadow_model_ckpt/%s'%args.task
+    if not os.path.isdir(SAVE_PREFIX):
+        os.mkdir(SAVE_PREFIX)
+    if not os.path.isdir(SAVE_PREFIX+'/models'+args.model):
+        os.mkdir(SAVE_PREFIX+'/models'+args.model)
 
-def maxpool(kernel_size, stride, padding):
-    pass  
+    all_shadow_acc = []
+    all_shadow_acc_mal = []
+
+    
+    base_model = get_base_model()
+    atk_setting = random_troj_setting('jumbo')
+    trainset_mal = MyBackdoorDataset(trainset, atk_setting, troj_gen_func, choice=shadow_indices, need_pad=need_pad)
+    trainloader = torch.utils.data.DataLoader(trainset_mal, batch_size=BATCH_SIZE, shuffle=True)
+    testset_mal = MyBackdoorDataset(testset, atk_setting, troj_gen_func, mal_only=True)
+    testloader_benign = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE)
+    testloader_mal = torch.utils.data.DataLoader(testset_mal, batch_size=BATCH_SIZE)
 
 
-def reduce_func(nodes):
-    print("this is reduce function")
-    # input_feat = nodes.data['x'][input_mask]
-    # print(input_feat)
-    print("reduce function ends")
-    return {'ft': nodes.data['x']}
+    #     train_model(model, trainloader, epoch_num=N_EPOCH, is_binary=is_binary, verbose=False)
+    #     save_path = SAVE_PREFIX+'/models'+args.model+'/shadow_jumbo_%d.model'%i
+    #     torch.save(model.state_dict(), save_path)
+    #     acc = eval_model(model, testloader_benign, is_binary=is_binary)
+    #     acc_mal = eval_model(model, testloader_mal, is_binary=is_binary)
+    #     print ("Acc %.4f, Acc on backdoor %.4f, saved to %s @ %s"%(acc, acc_mal, save_path, datetime.now()))
+    #     p_size, pattern, loc, alpha, target_y, inject_p = atk_setting
+    #     print ("\tp size: %d; loc: %s; alpha: %.3f; target_y: %d; inject p: %.3f"%(p_size, loc, alpha, target_y, inject_p))
+    #     all_shadow_acc.append(acc)
+    #     all_shadow_acc_mal.append(acc_mal)
 
-
-def initiate_node_feature(graph):
-    ft = None 
-
-    graph.ndata['ft'] = ft
-
-def cnn_cal(graph, image):
-    initiate_node_feature(graph, image)
-    graph.update_all(message_func=message_func, reduce_func=reduce_func)
-    ft = graph.ndata['ft'][0]
-    return ft
-
-import json
-# get cnn results
-pred, params = model(x_in)
-print(params.keys())
-with open("./intermediate_data/params.json", "w") as f:
-    json.dump(params, f)
-# get gnn transmission results
-res = cnn_cal(g)
+    # log = {'shadow_num':SHADOW_NUM,
+    #        'shadow_acc':sum(all_shadow_acc)/len(all_shadow_acc),
+    #        'shadow_acc_mal':sum(all_shadow_acc_mal)/len(all_shadow_acc_mal)}
+    # log_path = SAVE_PREFIX+'/jumbo_%s.log'%args.model
+    # with open(log_path, "w") as outf:
+    #     json.dump(log, outf)
+    # print ("Log file saved to %s"%log_path)

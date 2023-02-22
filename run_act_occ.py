@@ -1,6 +1,7 @@
 import dgl
 import numpy as np
 import torch
+from torch import nn 
 import torchvision
 import torchvision.transforms as transforms
 from utils_basic import load_dataset_setting, eval_model, BackdoorDataset
@@ -42,29 +43,36 @@ class MyBackdoorDataset(BackdoorDataset):
         return X_new, y_new, troj_label
 
 
-def train_2class_classification_model(model, base_model, dataloader, epoch_num, is_binary, verbose=True):
-    model.train()
+def train_2class_classification_model(model, base_model, dataloader, epoch_num, device):
+    loss_fcn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
 
+    # train loop
     for epoch in range(epoch_num):
+        model.train()
+        total_loss = 0
         for i,(x_in, y_in, troj_y_in) in enumerate(tqdm(dataloader)):
             label = troj_y_in
+            label = label.to(device)
             # init a graph
             g = get_graph(base_model)
             # get message passed graph
             message_passed_g = activation_passing(x_in, g)
+            message_passed_g = message_passed_g.to(device)
+            feat = message_passed_g.ndata.pop("ft")
+            feat_size = message_passed_g.ndata.pop("ft_size")
             # graph classification model learning 
-            logits = model(message_passed_g)
-            # TODO
-            pred_label = logits
-            loss = None
+            logits = model(message_passed_g, feat, feat_size)
+            loss = loss_fcn(logits, label)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+            total_loss += loss.item()
+        scheduler.step()
+        # train_acc = evaluate()
+        # valid_acc = evaluate()
 
-
-    return
 
 def get_base_model():
     x = './shadow_model_ckpt/mnist/models5/shadow_jumbo_0.model'

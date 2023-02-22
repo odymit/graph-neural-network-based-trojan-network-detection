@@ -81,7 +81,52 @@ class SGN(nn.Module):
             pooled_h = self.pool(g, h)
             score_over_layer += self.drop(self.linear_prediction[i](pooled_h))
         return score_over_layer
-    
+
+        
+class GIN(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+        self.ginlayers = nn.ModuleList()
+        self.batch_norms = nn.ModuleList()
+        num_layers = 5
+        # five-layer GCN with two-layer MLP aggregator and sum-neighbor-pooling scheme
+        for layer in range(num_layers - 1):  # excluding the input layer
+            if layer == 0:
+                mlp = MLP(input_dim, hidden_dim, hidden_dim)
+            else:
+                mlp = MLP(hidden_dim, hidden_dim, hidden_dim)
+            self.ginlayers.append(
+                GINConv(mlp, learn_eps=False)
+            )  # set to True if learning epsilon
+            self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
+        # linear functions for graph sum poolings of output of each layer
+        self.linear_prediction = nn.ModuleList()
+        for layer in range(num_layers):
+            if layer == 0:
+                self.linear_prediction.append(nn.Linear(input_dim, output_dim))
+            else:
+                self.linear_prediction.append(nn.Linear(hidden_dim, output_dim))
+        self.drop = nn.Dropout(0.5)
+        self.pool = (
+            SumPooling()
+        )  # change to mean readout (AvgPooling) on social network datasets
+
+    def forward(self, g, h):
+        # list of hidden representation at each layer (including the input layer)
+        hidden_rep = [h]
+        for i, layer in enumerate(self.ginlayers):
+            h = layer(g, h)
+            h = self.batch_norms[i](h)
+            h = F.relu(h)
+            hidden_rep.append(h)
+        score_over_layer = 0
+        # perform graph sum pooling over all nodes in each layer
+        for i, h in enumerate(hidden_rep):
+            pooled_h = self.pool(g, h)
+            score_over_layer += self.drop(self.linear_prediction[i](pooled_h))
+        return score_over_layer
+
+
 def split_fold10(labels, fold_idx=0):
     skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
     idx_list = []

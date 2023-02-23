@@ -1,0 +1,2 @@
+print(epoch, total_loss, train_acc, valid_acc_benign, valid_acc_mal)
+1 3875.1075899639327 (0.9985130111524163, 1345) (0.9997, 10000) (0.9975227085053675, 1211)

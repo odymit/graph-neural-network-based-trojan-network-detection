@@ -43,7 +43,7 @@ class MyBackdoorDataset(BackdoorDataset):
         return X_new, y_new, troj_label
 
 
-def train_2class_classification_model(model, base_model, dataloader, epoch_num, device):
+def train_occ_classification_model(model, base_model, dataloader, epoch_num, device):
     loss_fcn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
@@ -140,14 +140,13 @@ if __name__ == '__main__':
     
     base_model = get_base_model()
     atk_setting = random_troj_setting('jumbo')
-    trainset_mal = MyBackdoorDataset(trainset, atk_setting, troj_gen_func, choice=shadow_indices, need_pad=need_pad)
-    trainloader = torch.utils.data.DataLoader(trainset_mal, batch_size=BATCH_SIZE, shuffle=True)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
     testset_mal = MyBackdoorDataset(testset, atk_setting, troj_gen_func, mal_only=True)
     testloader_benign = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE)
     testloader_mal = torch.utils.data.DataLoader(testset_mal, batch_size=BATCH_SIZE)
 
 
-    #     train_model(model, trainloader, epoch_num=N_EPOCH, is_binary=is_binary, verbose=False)
+    train_occ_classification_model(model, base_model, trainloader, testloader_benign, testloader_mal, 3, device)
     #     save_path = SAVE_PREFIX+'/models'+args.model+'/shadow_jumbo_%d.model'%i
     #     torch.save(model.state_dict(), save_path)
     #     acc = eval_model(model, testloader_benign, is_binary=is_binary)

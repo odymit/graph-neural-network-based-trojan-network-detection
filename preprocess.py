@@ -5,7 +5,7 @@ from time import sleep
 TRAIN_NUM = 2048
 VAL_NUM = 256
 TEST_NUM = 256
-shadow_path = './shadow_model_ckpt/%s/models' % 'mnist'
+shadow_path = '/home/ubuntu/date/hdd4/shadow_model_ckpt/%s/models' % 'mnist'
 train_dataset = []
 for i in range(TRAIN_NUM):
     x = shadow_path + '/shadow_jumbo_%d.model' % i
@@ -30,7 +30,7 @@ for i in range(TEST_NUM):
 # print(train_dataset, val_dataset, test_dataset)
 import numpy as np
 from torchsummary import summary
-from model_lib.mnist_cnn_model import Model
+from model_lib.mnist_cnn_model import Model0 as Model
 from torch import nn
 from cogdl.data import Graph
 
@@ -104,16 +104,18 @@ def load_dataset(dataset):
             fc_out_edge = [[fc_index, out_index]]
 
             # get all nodes
-            nodes_feat = torch.stack(nodes_feat)
+            nodes_feat = torch.stack(nodes_feat).to_sparse()
             # print(nodes_feat.shape)
             # get all edges
-            all_edges = torch.tensor(conv1_2 + conv2_fc + fc_out_edge).t()
+            all_edges = torch.tensor(conv1_2 + conv2_fc + fc_out_edge).t().to_sparse()
             # print(all_edges)
             # g = Graph(edge_index=all_edges, x=nodes_feat, y=label)
-            dst_filename = '/home/ubuntu/date/hdd4'+ x[1::] + '.pth'
-            # print(dst_filename.replace('models', 'processed_data'))
+            # dst_filename = '/home/ubuntu/date/hdd4'+ x[1::] + '.pth'
+            dst_filename = '/'+ x[1::] + '.pth'
+            # print(dst_filename.replace('models', 'sparse_graph_info_data'))
+            # input("wait to check path")
             torch.save({'edges': all_edges, 'x': nodes_feat, 'y': label},
-                       dst_filename.replace('models', 'processed_data'))
+                       dst_filename.replace('models', 'sparsed_graph_info_data'))
 
             # print(g.save_sparse_csr())
             #             print("nodes:", g.num_nodes)
